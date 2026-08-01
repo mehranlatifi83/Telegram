@@ -23208,6 +23208,23 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return new ChatMessageAccessibilityNodeProvider(this);
     }
 
+    // the buttons of a message are reported in the order they are added to it: keeping that
+    // order lets each of them say which one comes before it, which is what a screen reader
+    // walks back through
+    final ArrayList<Integer> reportedVirtualViewIds = new ArrayList<>();
+
+    static final int NO_PREVIOUS_VIRTUAL_VIEW = Integer.MIN_VALUE;
+
+    int previousVirtualViewId(int virtualViewId) {
+        final int at = reportedVirtualViewIds.indexOf(virtualViewId);
+        if (at < 0) {
+            return NO_PREVIOUS_VIRTUAL_VIEW;
+        }
+        // what comes before the first button of a message is the message itself, and saying so
+        // is what keeps going back from a button from passing the message by
+        return at == 0 ? AccessibilityNodeProvider.HOST_VIEW_ID : reportedVirtualViewIds.get(at - 1);
+    }
+
     void sendAccessibilityEventForVirtualView(int viewId, int eventType) {
         sendAccessibilityEventForVirtualView(viewId, eventType, null);
     }
