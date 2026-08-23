@@ -26996,8 +26996,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return super.onHoverEvent(event);
     }
 
-    private boolean accessibilityFocused;
-    private boolean accessibilityHovered;
     private CharSequence readPlaybackPosition;
 
     private boolean isReadByAccessibility() {
@@ -27755,7 +27753,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     spokenText = withProgress;
                 }
 
-                CharSequence spokenText = accessibilityText;
                 CharSequence playbackPosition = MediaController.getPlaybackPositionDescription(currentMessageObject);
                 if (playbackPosition != null) {
                     // while the message is being read, keep reporting the position it was reached
@@ -27769,7 +27766,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     } else {
                         readPlaybackPosition = null;
                     }
-                    spokenText = TextUtils.concat(playbackPosition, ", ", accessibilityText);
+                    spokenText = TextUtils.concat(playbackPosition, ", ", spokenText);
                 }
 
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
