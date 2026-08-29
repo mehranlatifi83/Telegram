@@ -26751,6 +26751,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return true;
         } else if (action == R.id.acc_action_small_button) {
             didPressMiniButton(true);
+        } else if (reactionsLayoutInBubble != null && reactionsLayoutInBubble.performAccessibilityAction(action)) {
+            return true;
         } else if (action == R.id.acc_action_msg_options) {
             if (delegate != null) {
                 if (currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
@@ -27809,6 +27811,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         R.id.acc_action_open_link_preview,
                         TextUtils.isEmpty(preview) ? getString(R.string.OpenUrlTitle) : TextUtils.concat(getString(R.string.OpenUrlTitle), ", ", preview)
                     ));
+                }
+
+                // the reactions come after everything else a message offers: answering one is the
+                // last thing wanted of a message, and the actions before them are the ones reached
+                // for first
+                if (reactionsLayoutInBubble != null) {
+                    reactionsLayoutInBubble.addAccessibilityActions(info);
                 }
                 if (drawSelectionBackground || getBackground() != null) {
                     info.setSelected(true);
