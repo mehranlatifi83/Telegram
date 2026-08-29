@@ -27339,6 +27339,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         }
                     } else if (!TextUtils.isEmpty(currentMessageObject.messageText)) {
                         CharSequence messageText = currentMessageObject.messageText;
+                        // translating a chat puts the translated caption in the message text of a
+                        // media message, where its type belongs: the caption is read on its own
+                        // below, so report the type here as an untranslated message does
+                        if (!currentMessageObject.isMediaEmpty() && !TextUtils.isEmpty(currentMessageObject.caption) && TextUtils.equals(messageText, currentMessageObject.caption)) {
+                            messageText = currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner));
+                        }
                         if (messageText instanceof Spanned) {
                             final Spanned spanned = (Spanned) messageText;
                             CodeHighlighting.Span[] codeSpans = spanned.getSpans(0, spanned.length(), CodeHighlighting.Span.class);
@@ -27358,7 +27364,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                 messageText = ssb;
                             }
                         }
-                        sb.append(messageText);
+                        if (!TextUtils.isEmpty(messageText)) {
+                            sb.append(messageText);
+                        }
                     }
                     accessibilityTextTransferIndex = sb.length();
                     if (currentMessageObject.isMusic()) {
