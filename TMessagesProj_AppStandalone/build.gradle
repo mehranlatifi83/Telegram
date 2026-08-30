@@ -130,6 +130,9 @@ android {
         minSdkVersion 21
         targetSdkVersion 36
         versionName APP_VERSION_NAME
+        // the version code the package holds is this one multiplied by ten with the abi
+        // added to it, so the plain one is passed on for the updater to compare releases to
+        buildConfigField "int", "PROJECT_VERSION_CODE", APP_VERSION_CODE
         ndkVersion "27.2.12479018"
 
         multiDexEnabled true

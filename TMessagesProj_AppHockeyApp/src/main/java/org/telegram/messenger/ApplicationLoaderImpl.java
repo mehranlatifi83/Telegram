@@ -119,6 +119,11 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     private static long lastUpdateCheckTime;
     @Override
     protected void checkForUpdatesInternal() {
+        // updates come from the releases of the repository, so app center is not asked for one
+        if (isCustomUpdate()) {
+            GithubUpdaterController.getInstance().checkForUpdate(false, null);
+            return;
+        }
         try {
             if (BuildVars.DEBUG_VERSION) {
                 if (SystemClock.elapsedRealtime() - lastUpdateCheckTime < 60 * 60 * 1000) {
@@ -201,51 +206,57 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
         return true;
     }
 
+    // this build takes its updates from the releases of the repository below rather than from
+    // app center: the ones marked as a pre-release, which are the ones being tried out
+    public static final String GITHUB_REPOSITORY = "mehranlatifi83/Telegram";
+    public static final boolean GITHUB_PRE_RELEASE = true;
+
     @Override
     public boolean isCustomUpdate() {
-        return !TextUtils.isEmpty(org.telegram.messenger.BuildConfig.BETA_URL);
+        GithubUpdaterController.configure(GITHUB_REPOSITORY, GITHUB_PRE_RELEASE, BuildConfig.PROJECT_VERSION_CODE);
+        return GithubUpdaterController.getInstance().isConfigured();
     }
 
     @Override
     public BetaUpdate getUpdate() {
         if (!isCustomUpdate()) return null;
-        return BetaUpdaterController.getInstance().getUpdate();
+        return GithubUpdaterController.getInstance().getUpdate();
     }
 
     @Override
     public void checkUpdate(boolean force, Runnable whenDone) {
         if (!isCustomUpdate()) return;
-        BetaUpdaterController.getInstance().checkForUpdate(force, whenDone);
+        GithubUpdaterController.getInstance().checkForUpdate(force, whenDone);
     }
 
     @Override
     public void downloadUpdate() {
         if (!isCustomUpdate()) return;
-        BetaUpdaterController.getInstance().downloadUpdate();
+        GithubUpdaterController.getInstance().downloadUpdate();
     }
 
     @Override
     public void cancelDownloadingUpdate() {
         if (!isCustomUpdate()) return;
-        BetaUpdaterController.getInstance().cancelDownloadingUpdate();
+        GithubUpdaterController.getInstance().cancelDownloadingUpdate();
     }
 
     @Override
     public boolean isDownloadingUpdate() {
         if (!isCustomUpdate()) return false;
-        return BetaUpdaterController.getInstance().isDownloading();
+        return GithubUpdaterController.getInstance().isDownloading();
     }
 
     @Override
     public float getDownloadingUpdateProgress() {
         if (!isCustomUpdate()) return 0;
-        return BetaUpdaterController.getInstance().getDownloadingProgress();
+        return GithubUpdaterController.getInstance().getDownloadingProgress();
     }
 
     @Override
     public File getDownloadedUpdateFile() {
         if (!isCustomUpdate()) return null;
-        return BetaUpdaterController.getInstance().getDownloadedFile();
+        return GithubUpdaterController.getInstance().getDownloadedFile();
     }
 
     @Override
