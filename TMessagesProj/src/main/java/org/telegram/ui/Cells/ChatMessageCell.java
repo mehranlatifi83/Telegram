@@ -577,6 +577,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         default void didPressUserAvatar(ChatMessageCell cell, TLRPC.User user, float touchX, float touchY, boolean asForward) {
         }
 
+        /** Whether holding the avatar of a sender opens anything in this chat. */
+        default boolean canLongPressAvatar(ChatMessageCell cell) {
+            return false;
+        }
+
         default boolean didLongPressUserAvatar(ChatMessageCell cell, TLRPC.User user, float touchX, float touchY) {
             return false;
         }
@@ -17649,12 +17654,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (!isAvatarVisible || currentMessageObject == null || delegate == null) {
             return false;
         }
-        // the menu is drawn around the picture the avatar stands for, and does not come up without
-        // one: what has no picture is not offered here either
-        if (currentUser != null) {
-            return currentUser.id != 0 && currentUser.photo != null;
+        // whether holding the avatar leads anywhere is for the chat to answer: it opens in a
+        // group and in a chat with yourself, and nowhere else. A sender with no picture still has
+        // the menu, only without the picture drawn above it
+        if (!delegate.canLongPressAvatar(this)) {
+            return false;
         }
-        return currentChat != null && currentChat.photo != null;
+        return currentUser != null && currentUser.id != 0 || currentChat != null;
     }
 
     // held down is what it is asked to be, so that whatever the menu comes to hold is come by the
