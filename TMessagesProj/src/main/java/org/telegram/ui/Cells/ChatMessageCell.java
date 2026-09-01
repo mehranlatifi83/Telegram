@@ -27203,6 +27203,37 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                             }
                         }
                         sb.append(title);
+                        // the counter under a poll, and the state the poll is in. All of it is
+                        // written on the card, so a sighted reader has it without touching
+                        // anything, while nothing here was ever said out loud
+                        sb.append(", ");
+                        if (lastPollResultsVoters == 0) {
+                            sb.append(getString(lastPoll.quiz ? R.string.NoVotesQuiz : R.string.NoVotes));
+                        } else {
+                            sb.append(formatPluralString(lastPoll.quiz ? "Answer" : "Vote", lastPollResultsVoters));
+                        }
+                        if (lastPoll.multiple_choice && !pollVoted && !pollClosed) {
+                            sb.append(", ");
+                            sb.append(getString(R.string.AccDescrPollMultipleChoice));
+                        }
+                        if (pollVoted) {
+                            sb.append(", ");
+                            sb.append(getString(R.string.AccDescrPollVoted));
+                        }
+                        if (!pollClosed) {
+                            if (lastPoll.hide_results_until_close && !lastPoll.creator) {
+                                sb.append(", ");
+                                sb.append(getString(R.string.PollResultsWillLater));
+                            }
+                            final int closeDate = lastPoll.close_date;
+                            if (closeDate > 0 && closeDate > ConnectionsManager.getInstance(currentAccount).getCurrentTime()) {
+                                // the card counts down by the second. Saying when the poll closes
+                                // instead of how long is left keeps this text still, so the message
+                                // is not reported as changed over and over
+                                sb.append(", ");
+                                sb.append(formatString(R.string.AccDescrPollClosesAt, LocaleController.formatDateTime(closeDate, true)));
+                            }
+                        }
                     }
                     if (documentAttach != null) {
                         if (documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO) {
