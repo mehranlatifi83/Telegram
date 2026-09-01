@@ -28063,6 +28063,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 // nothing of it in the tree at all: it could be neither found nor pressed
                 if (pollAllowAdding && pollAddButtonDrawable != null) {
                     info.addChild(ChatMessageCell.this, POLL_ADD_OPTION);
+                    reportedVirtualViewIds.add(POLL_ADD_OPTION);
                 }
                 if (drawInstantView && !instantButtonRect.isEmpty()) {
                     info.addChild(ChatMessageCell.this, INSTANT_VIEW);
