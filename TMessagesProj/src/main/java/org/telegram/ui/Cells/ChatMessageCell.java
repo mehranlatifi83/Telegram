@@ -6253,6 +6253,71 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return label;
     }
 
+    private boolean albumPlaceNamesMedia;
+
+    /**
+     * Which of an album this message is, and how many there are, named after what the album holds
+     * where everything in it is of one kind. Every message of an album is drawn in a cell of its
+     * own, so going through one is a run of messages that say the same thing, with nothing to tell
+     * them apart or say how far along they are.
+     */
+    private CharSequence albumAccessibilityPlace() {
+        albumPlaceNamesMedia = false;
+        if (currentMessageObject == null || currentMessagesGroup == null || currentPosition == null) {
+            return null;
+        }
+        final ArrayList<MessageObject> messages = currentMessagesGroup.messages;
+        final int count = messages == null ? 0 : messages.size();
+        if (count <= 1) {
+            return null;
+        }
+        int index = -1;
+        for (int a = 0; a < count; a++) {
+            final MessageObject message = messages.get(a);
+            if (message != null && message.getId() == currentMessageObject.getId()) {
+                index = a;
+                break;
+            }
+        }
+        if (index < 0) {
+            return null;
+        }
+        // a group is kept in the order it was sent in, which is turned around when the chat it is
+        // in grows the other way
+        if (currentMessagesGroup.reversed) {
+            index = count - 1 - index;
+        }
+        return formatString(albumAccessibilityKind(messages), index + 1, count);
+    }
+
+    private int albumAccessibilityKind(ArrayList<MessageObject> messages) {
+        boolean photos = true, videos = true, music = true, files = true;
+        for (int a = 0; a < messages.size(); a++) {
+            final MessageObject message = messages.get(a);
+            if (message == null) {
+                continue;
+            }
+            photos = photos && message.type == MessageObject.TYPE_PHOTO;
+            videos = videos && message.isVideo();
+            music = music && message.isMusic();
+            files = files && message.isDocument() && !message.isMusic() && !message.isVideo();
+        }
+        albumPlaceNamesMedia = photos || videos || music || files;
+        if (photos) {
+            return R.string.AccDescrPhotoAlbumPlace;
+        }
+        if (videos) {
+            return R.string.AccDescrVideoAlbumPlace;
+        }
+        if (music) {
+            return R.string.AccDescrMusicAlbumPlace;
+        }
+        if (files) {
+            return R.string.AccDescrFileAlbumPlace;
+        }
+        return R.string.AccDescrAlbumPlace;
+    }
+
     private void didClickedPollImage(ChatMessageCell cell, ImageReceiver imageReceiver, TLRPC.PollAnswer answer, TLRPC.MessageMedia media, float x, float y, int unshuffledIndex) {
         /*if (unshuffledIndex == PollAttachedMediaPack.INDEX_DESCRIPTION) {
             if (pollContentDrawable != null && pollContentDrawable.getMedia() != null && pollContentDrawable.getMedia().document != null && (pollContentDrawable.isFile() || pollContentDrawable.isMusic())) {
@@ -27785,6 +27850,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                             sb.append(formatString(R.string.AccDescrDocumentType, fileName.substring(fileName.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT)));
                         }
                     }
+                    // a message of an album is one of several, each drawn in a cell of its own, and
+                    // nothing said which of them was being read or how many there were: going
+                    // through an album was a run of messages that all sounded the same
+                    final CharSequence albumPlace = albumAccessibilityPlace();
+                    if (albumPlace != null) {
+                        sb.append(albumPlace);
+                        sb.append(", ");
+                    }
                     if (currentMessageObject.richLayout != null && !currentMessageObject.richLayout.blocks.isEmpty()) {
                         for (RichMessageLayout.RichBlock block : currentMessageObject.richLayout.blocks) {
                             if (!block.isVisible()) {
@@ -27839,7 +27912,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                 messageText = ssb;
                             }
                         }
-                        if (!TextUtils.isEmpty(messageText)) {
+                        // where the album is named after what it holds, the kind of this message is
+                        // already in what was just said
+                        final boolean namedByAlbum = albumPlace != null && albumPlaceNamesMedia
+                            && TextUtils.equals(messageText, currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner)));
+                        if (!TextUtils.isEmpty(messageText) && !namedByAlbum) {
                             sb.append(messageText);
                         }
                     }
