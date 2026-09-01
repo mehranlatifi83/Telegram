@@ -5169,6 +5169,7 @@
     <string name="AccDescrPollMultipleChoice">Choose more than one</string>
     <string name="AccDescrPollVoted">You have voted</string>
     <string name="AccDescrPollClosesAt">Closes at %s</string>
+    <string name="AccDescrPollExplanationMedia">%s of the explanation</string>
     <string name="AccDescrPipMode">Picture-in-Picture mode</string>
     <string name="AccDescrVoipMicOn">Microphone is on</string>
     <string name="AccDescrVoipMicOff">Microphone is off</string>
