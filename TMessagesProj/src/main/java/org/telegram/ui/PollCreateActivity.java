@@ -2146,6 +2146,7 @@ public class PollCreateActivity extends BaseFragment implements NotificationCent
                         return false;
                     });
                     cell.setReorderDelegate(reorderDelegate);
+                    cell.setupRemoveAccessibilityAction();
                     view = cell;
                     break;
                 }

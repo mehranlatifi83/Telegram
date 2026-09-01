@@ -37,6 +37,7 @@
     <item name="acc_action_open_poll_explanation_media" type="id"/>
     <item name="acc_action_move_up" type="id"/>
     <item name="acc_action_move_down" type="id"/>
+    <item name="acc_action_remove_option" type="id"/>
     <item name="acc_action_copy_code" type="id"/>
     <item name="acc_action_summarize" type="id"/>
     <item name="acc_action_story_previous" type="id"/>

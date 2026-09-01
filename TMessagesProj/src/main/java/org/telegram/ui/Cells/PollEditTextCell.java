@@ -91,6 +91,7 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
     private boolean alwaysShowText2;
     private ChatActivityEnterViewAnimatedIconView emojiButton;
     private ReorderDelegate reorderDelegate;
+    private boolean removeAccessibilityAction;
     private CharSequence fieldLabel;
     private int charactersLeft = -1;
 
@@ -156,6 +157,9 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
                         info.setContentDescription(label);
                     }
                 }
+                if (removeAccessibilityAction && deleteImageView != null && deleteImageView.getVisibility() != VISIBLE && isEnabled()) {
+                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_remove_option, LocaleController.getString(R.string.Delete)));
+                }
                 if (reorderDelegate != null) {
                     if (reorderDelegate.canMoveUp(PollEditTextCell.this)) {
                         info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_move_up, LocaleController.getString(R.string.AccActionMoveUp)));
@@ -168,6 +172,10 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
 
             @Override
             public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                if (action == R.id.acc_action_remove_option && removeAccessibilityAction) {
+                    callOnDelete();
+                    return true;
+                }
                 if (reorderDelegate != null) {
                     if (action == R.id.acc_action_move_up && reorderDelegate.canMoveUp(PollEditTextCell.this)) {
                         reorderDelegate.moveUp(PollEditTextCell.this);
@@ -493,6 +501,21 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
             return;
         }
         deleteImageView.callOnClick();
+    }
+
+    /**
+     * On a poll the button for removing an option is hidden to make room for the one that attaches
+     * something, and the only way left of removing it is to empty the field and then press back
+     * once more on an empty field. There is nothing on the screen that says so. Put the same
+     * removal on the field as an action, but only where the button itself is not there to be
+     * pressed, so it is not offered twice.
+     */
+    public void setupRemoveAccessibilityAction() {
+        if (deleteImageView == null) {
+            return;
+        }
+        removeAccessibilityAction = true;
+        installFieldAccessibilityDelegate();
     }
 
     public void setShowNextButton(boolean value) {
