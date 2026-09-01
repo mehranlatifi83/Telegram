@@ -27534,6 +27534,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         public static final int CONTACT_VIEW = 491;
         public static final int CONTACT_ADD = 490;
         public static final int CONTACT_MESSAGE = 489;
+        public static final int POLL_ADD_OPTION = 488;
         private Path linkPath = new Path();
         private RectF rectF = new RectF();
         private Rect rect = new Rect();
@@ -28057,6 +28058,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     reportedVirtualViewIds.add(POLL_BUTTONS_START + i);
                     i++;
                 }
+                // a poll that lets anyone add an answer has a button under the last one for it.
+                // It is a control of its own, drawn like the answers above it, and there was
+                // nothing of it in the tree at all: it could be neither found nor pressed
+                if (pollAllowAdding && pollAddButtonDrawable != null) {
+                    info.addChild(ChatMessageCell.this, POLL_ADD_OPTION);
+                }
                 if (drawInstantView && !instantButtonRect.isEmpty()) {
                     info.addChild(ChatMessageCell.this, INSTANT_VIEW);
                     reportedVirtualViewIds.add(INSTANT_VIEW);
@@ -28385,6 +28392,23 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     rect.offset(pos[0], pos[1]);
                     info.setBoundsInScreen(rect);
                     info.setClickable(true);
+                } else if (virtualViewId == POLL_ADD_OPTION) {
+                    if (!getPollAddButtonBounds(rect)) {
+                        return null;
+                    }
+                    info.setClassName("android.widget.Button");
+                    info.setEnabled(true);
+                    info.setText(getString(R.string.PollAddAnOption));
+                    info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    info.setBoundsInParent(rect);
+                    // the bounds go into the map the cell hit tests against, so the button is
+                    // found by a finger on the screen as well as by swiping to it
+                    if (accessibilityVirtualViewBounds.get(virtualViewId) == null || !accessibilityVirtualViewBounds.get(virtualViewId).equals(rect)) {
+                        accessibilityVirtualViewBounds.put(virtualViewId, new Rect(rect));
+                    }
+                    rect.offset(pos[0], pos[1]);
+                    info.setBoundsInScreen(rect);
+                    info.setClickable(true);
                 } else if (virtualViewId == INSTANT_VIEW) {
                     info.setClassName("android.widget.Button");
                     info.setEnabled(true);
@@ -28631,6 +28655,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         // sent a vote again instead of opening the menu it has. Do what a press
                         // on the option itself does
                         performPollOptionClick(buttonIndex, button);
+                        sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);
+                    } else if (virtualViewId == POLL_ADD_OPTION) {
+                        if (delegate != null) {
+                            delegate.didPressAddPollOptionButton(ChatMessageCell.this);
+                        }
                         sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);
                     } else if (virtualViewId == POLL_HINT) {
                         didPressVoteHint();
