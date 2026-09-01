@@ -5192,6 +5192,7 @@
     <string name="AccDescrPollAddingOptionsLocked">Not while the poll is a quiz or shows who voted</string>
     <string name="AccDescrTodoDone">Done</string>
     <string name="AccDescrTodoDoneBy">Done by %s</string>
+    <string name="AccDescrPollVotedBy">Voted by %s</string>
     <string name="AccDescrPipMode">Picture-in-Picture mode</string>
     <string name="AccDescrVoipMicOn">Microphone is on</string>
     <string name="AccDescrVoipMicOff">Microphone is off</string>
