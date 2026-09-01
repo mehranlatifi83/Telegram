@@ -5193,6 +5193,7 @@
     <string name="AccDescrTodoDone">Done</string>
     <string name="AccDescrTodoDoneBy">Done by %s</string>
     <string name="AccDescrPollVotedBy">Voted by %s</string>
+    <string name="AccActionCopyText">Copy %s</string>
     <string name="AccDescrPipMode">Picture-in-Picture mode</string>
     <string name="AccDescrVoipMicOn">Microphone is on</string>
     <string name="AccDescrVoipMicOff">Microphone is off</string>
