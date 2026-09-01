@@ -5188,6 +5188,8 @@
     <string name="AccDescrTodoNoTasks">Add a task first</string>
     <string name="AccDescrTodoTitleTooLong">The title is too long</string>
     <string name="AccDescrTodoTaskTooLong">A task is too long</string>
+    <string name="AccDescrPollQuizLocked">This poll was started as a quiz and stays one</string>
+    <string name="AccDescrPollAddingOptionsLocked">Not while the poll is a quiz or shows who voted</string>
     <string name="AccDescrPipMode">Picture-in-Picture mode</string>
     <string name="AccDescrVoipMicOn">Microphone is on</string>
     <string name="AccDescrVoipMicOff">Microphone is off</string>
