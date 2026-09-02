@@ -5511,6 +5511,19 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         }
     }
 
+    private CharSequence emojiStatusAccessibilityName() {
+        Long documentId = null;
+        if (user != null) {
+            documentId = UserObject.getEmojiStatusDocumentId(user);
+        } else if (chat != null && DialogObject.getEmojiStatusDocumentId(chat.emoji_status) != 0) {
+            documentId = DialogObject.getEmojiStatusDocumentId(chat.emoji_status);
+        }
+        if (documentId == null || documentId == 0) {
+            return null;
+        }
+        return MessageObject.describeCustomEmoji(currentAccount, documentId);
+    }
+
     @Override
     public void onPopulateAccessibilityEvent(AccessibilityEvent event) {
         super.onPopulateAccessibilityEvent(event);
@@ -5600,7 +5613,14 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             sb.append(". ");
         }
         if (drawPremium) {
-            sb.append(getString(R.string.AccDescrPremium));
+            // an account that chose a status wears it in place of the star, and which one it chose
+            // is the whole of what is drawn there
+            final CharSequence status = emojiStatusAccessibilityName();
+            sb.append(TextUtils.isEmpty(status) ? getString(R.string.AccDescrPremium) : status);
+            sb.append(". ");
+        }
+        if (isHiddenInCommunity) {
+            sb.append(getString(R.string.AccDescrChatHiddenInCommunity));
             sb.append(". ");
         }
         if (dialogMuted) {
@@ -5715,8 +5735,14 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             return sb;
         }
         if (isForumCell() && messageLayout != null && !TextUtils.isEmpty(messageLayout.getText())) {
+            // a forum is drawn on two lines: the topics that have something new in them, and under
+            // them the message that is newest of all
             sb.append(messageLayout.getText());
             sb.append(". ");
+            if (buttonLayout != null && !TextUtils.isEmpty(buttonLayout.getText())) {
+                sb.append(buttonLayout.getText());
+                sb.append(". ");
+            }
             return sb;
         }
         if (encryptedChat == null) {
