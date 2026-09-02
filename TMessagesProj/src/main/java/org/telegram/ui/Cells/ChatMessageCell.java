@@ -6008,6 +6008,67 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
     }
 
+    private static final int SLOT_MACHINE_CODE_POINT = 0x1F3B0;
+
+    /**
+     * What a thrown game emoji landed on. The number is the whole of it for most of them; a slot
+     * machine keeps three reels packed into the one number and is read out as the three of them.
+     */
+    private CharSequence diceAccessibilityOutcome() {
+        if (currentMessageObject == null || !currentMessageObject.isDice()) {
+            return null;
+        }
+        final int value = currentMessageObject.getDiceValue();
+        if (value <= 0) {
+            // still on its way: the server has not said yet how it landed
+            return null;
+        }
+        final String emoji = currentMessageObject.getDiceEmoji();
+        if (new String(Character.toChars(SLOT_MACHINE_CODE_POINT)).equals(emoji)) {
+            return slotAccessibilityOutcome(value);
+        }
+        final StringBuilder sb = new StringBuilder();
+        sb.append(value);
+        // which throw counts as a win is the server's to say, and it says it for the games it
+        // knows about. Where it has not said, the number is all there is to give
+        final MessagesController.DiceFrameSuccess success = MessagesController.getInstance(currentAccount).diceSuccess.get(emoji);
+        if (success != null && success.num == value) {
+            sb.append(", ").append(getString(R.string.AccDescrDiceWin));
+        }
+        return sb;
+    }
+
+    // the three reels of a slot machine are packed into the one number, two bits to a reel, the
+    // same way they are taken apart to be drawn
+    private CharSequence slotAccessibilityOutcome(int value) {
+        final int raw = value - 1;
+        final int[] reels = { raw & 3, raw >> 2 & 3, raw >> 4 & 3 };
+        final StringBuilder sb = new StringBuilder();
+        for (int reel : reels) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(getString(slotAccessibilityReel(reel)));
+        }
+        if (reels[0] == 3 && reels[1] == 3 && reels[2] == 3) {
+            sb.append(", ").append(getString(R.string.AccDescrSlotJackpot));
+        }
+        return sb;
+    }
+
+    private static int slotAccessibilityReel(int reel) {
+        switch (reel) {
+            case 0:
+                return R.string.AccDescrSlotBar;
+            case 1:
+                return R.string.AccDescrSlotBerries;
+            case 2:
+                return R.string.AccDescrSlotLemon;
+            default:
+                return R.string.AccDescrSlotSeven;
+        }
+    }
+
     private void didClickedImage() {
         if (currentMessageObject.hasMediaSpoilers() && !currentMessageObject.needDrawBluredPreview() && !currentMessageObject.isMediaSpoilersRevealed) {
             if (delegate != null && currentMessageObject.isSensitive()) {
@@ -27157,6 +27218,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                             }
                         }
                         sb.append(messageText);
+                        // a game emoji is thrown and lands on something, and what it landed on is
+                        // in the message from the moment it arrives: the animation only plays it
+                        // out. None of it was said, so a screen reader was told a game had been
+                        // sent and never how it went
+                        final CharSequence outcome = diceAccessibilityOutcome();
+                        if (!TextUtils.isEmpty(outcome)) {
+                            sb.append(", ");
+                            sb.append(outcome);
+                        }
                     }
                     if (documentAttach != null && (documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT || documentAttachType == DOCUMENT_ATTACH_TYPE_GIF || documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO)) {
                         if (buttonState == 1 && loadingProgressLayout != null) {
