@@ -27357,6 +27357,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     }
                 }
             }
+        } else if (action == R.id.acc_action_play_effect) {
+            if (delegate != null && getEffect() != null) {
+                delegate.didPressEffect(this);
+            }
         } else if (action == R.id.acc_action_open_poll_media) {
             if (hasPollDescriptionMedia()) {
                 final Rect bounds = pollContentDrawable.getBounds();
@@ -28050,6 +28054,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                             sb.append(giveaway);
                         }
                     }
+                    // an effect is chosen when a message is sent and drawn on it ever after: it is
+                    // as much a part of what was sent as the words are, and it was never said
+                    final TLRPC.TL_availableEffect effect = getEffect();
+                    if (effect != null && !TextUtils.isEmpty(effect.emoticon)) {
+                        sb.append(", ");
+                        sb.append(formatString(R.string.AccDescrMessageEffect, effect.emoticon));
+                    }
                     accessibilityTextTransferIndex = sb.length();
                     if (currentMessageObject.isMusic()) {
                         sb.append("\n");
@@ -28524,6 +28535,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
                 // opening what a poll carries is a thing to do with the message, so it is an
                 // action rather than another stop to swipe past on every poll
+                // the effect is drawn beside the time and a touch on it plays it again. It is no
+                // view of its own, so playing it was out of reach
+                final TLRPC.TL_availableEffect messageEffect = getEffect();
+                if (messageEffect != null && !TextUtils.isEmpty(messageEffect.emoticon)) {
+                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                        R.id.acc_action_play_effect,
+                        TextUtils.concat(getString(R.string.AccActionPlay), ", ", messageEffect.emoticon)
+                    ));
+                }
                 if (hasPollDescriptionMedia()) {
                     info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
                         R.id.acc_action_open_poll_media,
