@@ -5619,6 +5619,14 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             sb.append(getString(R.string.AccDescrChatVoiceChatActive));
             sb.append(". ");
         }
+        // a ring is drawn around the picture where there is a story, and in colour while it has
+        // not been watched. There is an action for opening one, but nothing said there was one
+        // waiting, which is the whole of what the ring is for
+        if (currentDialogId != 0 && !isTopic && !isDialogFolder()
+            && MessagesController.getInstance(currentAccount).getStoriesController().hasUnreadStories(currentDialogId)) {
+            sb.append(getString(R.string.AccDescrChatUnreadStories));
+            sb.append(". ");
+        }
         if (showTtl && ttlPeriod > 0) {
             sb.append(LocaleController.formatString(R.string.AutoDeleteAfter, LocaleController.formatTTLString(ttlPeriod)));
             sb.append(". ");

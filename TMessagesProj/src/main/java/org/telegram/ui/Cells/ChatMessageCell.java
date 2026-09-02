@@ -6258,16 +6258,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return label;
     }
 
-    private boolean albumPlaceNamesMedia;
-
     /**
-     * Which of an album this message is, and how many there are, named after what the album holds
-     * where everything in it is of one kind. Every message of an album is drawn in a cell of its
-     * own, so going through one is a run of messages that say the same thing, with nothing to tell
-     * them apart or say how far along they are.
+     * That this message belongs to an album, what it is, and which of how many. Every message of an
+     * album is drawn in a cell of its own, so going through one is a run of messages that say the
+     * same thing, with nothing to tell them apart or say how far along they are.
      */
     private CharSequence albumAccessibilityPlace() {
-        albumPlaceNamesMedia = false;
         if (currentMessageObject == null || currentMessagesGroup == null || currentPosition == null) {
             return null;
         }
@@ -6292,35 +6288,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (currentMessagesGroup.reversed) {
             index = count - 1 - index;
         }
-        return formatString(albumAccessibilityKind(messages), index + 1, count);
-    }
-
-    private int albumAccessibilityKind(ArrayList<MessageObject> messages) {
-        boolean photos = true, videos = true, music = true, files = true;
-        for (int a = 0; a < messages.size(); a++) {
-            final MessageObject message = messages.get(a);
-            if (message == null) {
-                continue;
-            }
-            photos = photos && message.type == MessageObject.TYPE_PHOTO;
-            videos = videos && message.isVideo();
-            music = music && message.isMusic();
-            files = files && message.isDocument() && !message.isMusic() && !message.isVideo();
+        // what this one is, in the word the app already has for it, so an album of several kinds
+        // says of each of its messages which kind it is
+        final CharSequence kind = currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner));
+        final CharSequence place = formatString(R.string.Of, index + 1, count);
+        if (TextUtils.isEmpty(kind)) {
+            return TextUtils.concat(getString(R.string.Album), ", ", place);
         }
-        albumPlaceNamesMedia = photos || videos || music || files;
-        if (photos) {
-            return R.string.AccDescrPhotoAlbumPlace;
-        }
-        if (videos) {
-            return R.string.AccDescrVideoAlbumPlace;
-        }
-        if (music) {
-            return R.string.AccDescrMusicAlbumPlace;
-        }
-        if (files) {
-            return R.string.AccDescrFileAlbumPlace;
-        }
-        return R.string.AccDescrAlbumPlace;
+        return TextUtils.concat(getString(R.string.Album), ", ", kind, " ", place);
     }
 
     private void didClickedPollImage(ChatMessageCell cell, ImageReceiver imageReceiver, TLRPC.PollAnswer answer, TLRPC.MessageMedia media, float x, float y, int unshuffledIndex) {
@@ -27920,7 +27895,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         }
                         // where the album is named after what it holds, the kind of this message is
                         // already in what was just said
-                        final boolean namedByAlbum = albumPlace != null && albumPlaceNamesMedia
+                        final boolean namedByAlbum = albumPlace != null
                             && TextUtils.equals(messageText, currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner)));
                         if (!TextUtils.isEmpty(messageText) && !namedByAlbum) {
                             sb.append(messageText);
@@ -28320,7 +28295,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 // a poll that lets anyone add an answer has a button under the last one for it.
                 // It is a control of its own, drawn like the answers above it, and there was
                 // nothing of it in the tree at all: it could be neither found nor pressed
-                if (pollAllowAdding && pollAddButtonDrawable != null) {
+                // whether a poll lets answers be added is worked out for a poll alone, so a cell
+                // used again for a message that is not one keeps the answer of the poll it held
+                // before. The button is drawn for a poll only; ask for one here as well
+                if (pollAllowAdding && pollAddButtonDrawable != null && currentMessageObject.isPoll()) {
                     info.addChild(ChatMessageCell.this, POLL_ADD_OPTION);
                     reportedVirtualViewIds.add(POLL_ADD_OPTION);
                 }
@@ -28952,7 +28930,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         performPollOptionClick(buttonIndex, button);
                         sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);
                     } else if (virtualViewId == POLL_ADD_OPTION) {
-                        if (delegate != null) {
+                        if (delegate != null && currentMessageObject.isPoll()) {
                             delegate.didPressAddPollOptionButton(ChatMessageCell.this);
                         }
                         sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);

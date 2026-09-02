@@ -90,9 +90,9 @@ public class PollAttachButton extends View {
         info.setClassName("android.widget.Button");
         final CharSequence name = attachedMedia == null ? null : attachedMedia.getAccessibilityName();
         if (TextUtils.isEmpty(name)) {
-            info.setContentDescription(LocaleController.getString(R.string.AccActionAttachMedia));
+            info.setContentDescription(LocaleController.getString(R.string.AccDescrAttachButton));
         } else {
-            info.setContentDescription(TextUtils.concat(LocaleController.getString(R.string.AccActionReplaceMedia), ", ", name));
+            info.setContentDescription(TextUtils.concat(LocaleController.getString(R.string.Change), ", ", name));
         }
     }
 

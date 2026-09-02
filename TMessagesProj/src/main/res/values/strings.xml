@@ -5166,6 +5166,7 @@
     <string name="AccDescrQuizCorrectAnswer">Correct answer</string>
     <string name="AccDescrQuizIncorrectAnswer">Incorrect answer</string>
     <string name="AccDescrQuizExplanation">Explanation</string>
+    <string name="AccDescrChatUnreadStories">With new stories</string>
     <string name="AccDescrPollMultipleChoice">Choose more than one</string>
     <string name="AccDescrPollVoted">You have voted</string>
     <string name="AccDescrPollClosesAt">Closes at %s</string>
@@ -5173,8 +5174,6 @@
     <string name="AccActionMoveUp">Move up</string>
     <string name="AccActionMoveDown">Move down</string>
     <string name="AccDescrPollOptionMoved">Now %1$d of %2$d</string>
-    <string name="AccActionAttachMedia">Attach media</string>
-    <string name="AccActionReplaceMedia">Replace media</string>
     <string name="AccDescrPollOptionNumber">Option %1$d of %2$d</string>
     <string name="AccDescrTodoTaskNumber">Task %1$d of %2$d</string>
     <string name="AccDescrPollCharactersLeft">%s left</string>
@@ -5194,11 +5193,6 @@
     <string name="AccDescrTodoDoneBy">Done by %s</string>
     <string name="AccDescrPollVotedBy">Voted by %s</string>
     <string name="AccActionCopyText">Copy %s</string>
-    <string name="AccDescrPhotoAlbumPlace">Photo album, %1$d of %2$d</string>
-    <string name="AccDescrVideoAlbumPlace">Video album, %1$d of %2$d</string>
-    <string name="AccDescrMusicAlbumPlace">Music album, %1$d of %2$d</string>
-    <string name="AccDescrFileAlbumPlace">File album, %1$d of %2$d</string>
-    <string name="AccDescrAlbumPlace">Album, %1$d of %2$d</string>
     <string name="AccDescrChatMarkedUnread">Marked as unread</string>
     <string name="AccDescrChatPinned">Pinned</string>
     <string name="AccDescrChatBotVerified">Verified bot</string>
