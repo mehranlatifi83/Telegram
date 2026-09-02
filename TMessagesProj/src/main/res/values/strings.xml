@@ -5199,6 +5199,7 @@
     <string name="AccDescrMusicAlbumPlace">Music album, %1$d of %2$d</string>
     <string name="AccDescrFileAlbumPlace">File album, %1$d of %2$d</string>
     <string name="AccDescrAlbumPlace">Album, %1$d of %2$d</string>
+    <string name="AccDescrChatMarkedUnread">Marked as unread</string>
     <string name="AccDescrPipMode">Picture-in-Picture mode</string>
     <string name="AccDescrVoipMicOn">Microphone is on</string>
     <string name="AccDescrVoipMicOff">Microphone is off</string>
