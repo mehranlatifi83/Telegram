@@ -5202,6 +5202,12 @@
     <string name="AccDescrNotificationsUnmuted">Notifications on</string>
     <string name="AccDescrCameraFront">Front camera</string>
     <string name="AccDescrCameraBack">Back camera</string>
+    <string name="AccDescrDiceWin">a win</string>
+    <string name="AccDescrSlotBar">bar</string>
+    <string name="AccDescrSlotBerries">berries</string>
+    <string name="AccDescrSlotLemon">lemon</string>
+    <string name="AccDescrSlotSeven">seven</string>
+    <string name="AccDescrSlotJackpot">jackpot</string>
     <string name="AccDescrPipMode">Picture-in-Picture mode</string>
     <string name="AccDescrVoipMicOn">Microphone is on</string>
     <string name="AccDescrVoipMicOff">Microphone is off</string>
