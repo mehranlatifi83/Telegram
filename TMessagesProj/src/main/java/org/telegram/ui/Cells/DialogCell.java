@@ -5550,6 +5550,21 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     }
 
     private CharSequence buildAccessibilityText() {
+        final StringBuilder sb = (StringBuilder) buildAccessibilityTextBody();
+        // which folders a chat is in is not a thing about the chat but about where it has been
+        // put, so it comes last of all, after the message, with a word in front of it so it is
+        // not taken for part of what was said
+        if (hasTags()) {
+            final CharSequence folders = tags.getAccessibilityText();
+            if (!TextUtils.isEmpty(folders)) {
+                sb.append(LocaleController.formatString(R.string.AccDescrChatInFolders, folders));
+                sb.append(". ");
+            }
+        }
+        return sb;
+    }
+
+    private CharSequence buildAccessibilityTextBody() {
         StringBuilder sb = new StringBuilder();
         if (titleOverride != null) {
             sb.append(titleOverride);
@@ -5653,10 +5668,6 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         }
         if (getIsPinned()) {
             sb.append(getString(R.string.AccDescrChatPinned));
-            sb.append(". ");
-        }
-        if (hasTags()) {
-            sb.append(tags.getAccessibilityText());
             sb.append(". ");
         }
         if (unreadCount > 0) {

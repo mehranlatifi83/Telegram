@@ -6277,6 +6277,36 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      * album is drawn in a cell of its own, so going through one is a run of messages that say the
      * same thing, with nothing to tell them apart or say how far along they are.
      */
+    /**
+     * What one message of an album is. The name a message gives itself answers "album" for
+     * anything that belongs to one, which is the word already said before it and no use here.
+     */
+    private CharSequence albumAccessibilityKind() {
+        final MessageObject message = currentMessageObject;
+        if (message == null) {
+            return null;
+        }
+        if (message.isVideo()) {
+            return getString(R.string.AttachVideo);
+        }
+        if (message.isGif()) {
+            return getString(R.string.AttachGif);
+        }
+        if (message.isVoice()) {
+            return getString(R.string.AttachAudio);
+        }
+        if (message.isMusic()) {
+            return getString(R.string.AttachMusic);
+        }
+        if (message.type == MessageObject.TYPE_PHOTO) {
+            return getString(R.string.AttachPhoto);
+        }
+        if (message.isDocument()) {
+            return getString(R.string.AttachDocument);
+        }
+        return null;
+    }
+
     private CharSequence albumAccessibilityPlace() {
         if (currentMessageObject == null || currentMessagesGroup == null || currentPosition == null) {
             return null;
@@ -6304,7 +6334,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         // what this one is, in the word the app already has for it, so an album of several kinds
         // says of each of its messages which kind it is
-        final CharSequence kind = currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner));
+        final CharSequence kind = albumAccessibilityKind();
         final CharSequence place = formatString(R.string.Of, index + 1, count);
         if (TextUtils.isEmpty(kind)) {
             return TextUtils.concat(getString(R.string.Album), ", ", place);
@@ -27357,10 +27387,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     }
                 }
             }
-        } else if (action == R.id.acc_action_play_effect) {
-            if (delegate != null && getEffect() != null) {
-                delegate.didPressEffect(this);
-            }
         } else if (action == R.id.acc_action_open_poll_media) {
             if (hasPollDescriptionMedia()) {
                 final Rect bounds = pollContentDrawable.getBounds();
@@ -27880,7 +27906,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         public static final int CONTACT_ADD = 490;
         public static final int CONTACT_MESSAGE = 489;
         public static final int POLL_ADD_OPTION = 488;
-        public static final int GIVEAWAY_BUTTONS_START = 400;
+        // well clear of the ids that stand for one button each, which run down from 499: a range
+        // that reached up into them would answer for every one of them and hide the lot
+        public static final int GIVEAWAY_BUTTONS_START = 300;
+        public static final int GIVEAWAY_BUTTONS_END = 400;
         private Path linkPath = new Path();
         private RectF rectF = new RectF();
         private Rect rect = new Rect();
@@ -28030,9 +28059,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         }
                         // where the album is named after what it holds, the kind of this message is
                         // already in what was just said
-                        final boolean namedByAlbum = albumPlace != null
-                            && TextUtils.equals(messageText, currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner)));
-                        if (!TextUtils.isEmpty(messageText) && !namedByAlbum) {
+                        final CharSequence mediaTitle = currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner));
+                        final boolean namedByAlbum = albumPlace != null && TextUtils.equals(messageText, mediaTitle);
+                        // a poll names itself twice over: once as the kind of message it is, and
+                        // again under its question, where the kind is said in full
+                        final boolean namedByPoll = currentMessageObject.isPoll() && lastPoll != null
+                            && TextUtils.equals(messageText, mediaTitle);
+                        if (!TextUtils.isEmpty(messageText) && !namedByAlbum && !namedByPoll) {
                             sb.append(messageText);
                         }
                         // a game emoji is thrown and lands on something, and what it landed on is
@@ -28535,15 +28568,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
                 // opening what a poll carries is a thing to do with the message, so it is an
                 // action rather than another stop to swipe past on every poll
-                // the effect is drawn beside the time and a touch on it plays it again. It is no
-                // view of its own, so playing it was out of reach
-                final TLRPC.TL_availableEffect messageEffect = getEffect();
-                if (messageEffect != null && !TextUtils.isEmpty(messageEffect.emoticon)) {
-                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
-                        R.id.acc_action_play_effect,
-                        TextUtils.concat(getString(R.string.AccActionPlay), ", ", messageEffect.emoticon)
-                    ));
-                }
                 if (hasPollDescriptionMedia()) {
                     info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
                         R.id.acc_action_open_poll_media,
@@ -28825,12 +28849,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 } else if (virtualViewId == POLL_HINT) {
                     info.setClassName("android.widget.Button");
                     info.setEnabled(true);
-                    info.setText(getString(R.string.AccDescrQuizExplanation));
                     // the same button opens the explanation and closes it again, so which of the
-                    // two the press does is what the action is called
+                    // two it is now has to be said on the button itself: a name alone leaves no
+                    // way of knowing whether pressing it will open or close
+                    final boolean explanationOpen = currentMessageObject != null && currentMessageObject.expandedExplanation;
+                    info.setText(TextUtils.concat(
+                        getString(R.string.AccDescrQuizExplanation), ", ",
+                        getString(explanationOpen ? R.string.AccDescrExpanded : R.string.AccDescrCollapsed)
+                    ));
                     info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
                         AccessibilityNodeInfo.ACTION_CLICK,
-                        getString(currentMessageObject != null && currentMessageObject.expandedExplanation ? R.string.PollCollapse : R.string.PollExpand)
+                        getString(explanationOpen ? R.string.PollCollapse : R.string.PollExpand)
                     ));
                     rect.set(pollHintX - dp(8), pollHintY - dp(8), pollHintX + dp(32), pollHintY + dp(32));
                     info.setBoundsInParent(rect);
@@ -28857,7 +28886,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     rect.offset(pos[0], pos[1]);
                     info.setBoundsInScreen(rect);
                     info.setClickable(true);
-                } else if (virtualViewId >= GIVEAWAY_BUTTONS_START && virtualViewId < POLL_BUTTONS_START) {
+                } else if (virtualViewId >= GIVEAWAY_BUTTONS_START && virtualViewId < GIVEAWAY_BUTTONS_END) {
                     final int index = virtualViewId - GIVEAWAY_BUTTONS_START;
                     final CharSequence title = giveawayAccessibilityButtonTitle(index);
                     final Rect bounds = giveawayAccessibilityButtonBounds(index);
@@ -29132,7 +29161,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);
                     } else if (virtualViewId == POLL_HINT) {
                         didPressVoteHint();
-                    } else if (virtualViewId >= GIVEAWAY_BUTTONS_START && virtualViewId < POLL_BUTTONS_START) {
+                    } else if (virtualViewId >= GIVEAWAY_BUTTONS_START && virtualViewId < GIVEAWAY_BUTTONS_END) {
                         if (delegate != null) {
                             delegate.didPressGiveawayChatButton(ChatMessageCell.this, virtualViewId - GIVEAWAY_BUTTONS_START);
                         }

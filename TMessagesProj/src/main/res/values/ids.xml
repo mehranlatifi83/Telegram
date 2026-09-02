@@ -32,7 +32,6 @@
     <item name="acc_action_chat_preview" type="id"/>
     <item name="acc_action_open_avatar" type="id"/>
     <item name="acc_action_open_forwarded_origin" type="id"/>
-    <item name="acc_action_play_effect" type="id"/>
     <item name="acc_action_open_link_preview" type="id"/>
     <item name="acc_action_open_poll_media" type="id"/>
     <item name="acc_action_open_poll_explanation_media" type="id"/>
