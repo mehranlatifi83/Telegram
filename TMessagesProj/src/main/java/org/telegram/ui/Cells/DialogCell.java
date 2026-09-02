@@ -5533,16 +5533,53 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 sb.append(". ");
             }
         }
+        // the badges drawn beside the name. A warning that a chat is a scam or a fake is the one
+        // that matters most of all, and none of them were ever said
+        if (drawScam == 1) {
+            sb.append(getString(R.string.ScamMessage));
+            sb.append(". ");
+        } else if (drawScam == 2) {
+            sb.append(getString(R.string.FakeMessage));
+            sb.append(". ");
+        }
         if (drawVerified) {
             sb.append(getString(R.string.AccDescrVerified));
+            sb.append(". ");
+        }
+        if (drawBotVerified) {
+            sb.append(getString(R.string.AccDescrChatBotVerified));
+            sb.append(". ");
+        }
+        if (drawPremium) {
+            sb.append(getString(R.string.AccDescrPremium));
             sb.append(". ");
         }
         if (dialogMuted) {
             sb.append(getString(R.string.AccDescrNotificationsMuted));
             sb.append(". ");
+        } else if (drawUnmute) {
+            // a topic left with its sound on inside a chat that is silent draws a mark of its own
+            sb.append(getString(R.string.AccDescrNotificationsUnmuted));
+            sb.append(". ");
         }
         if (isOnline()) {
             sb.append(getString(R.string.AccDescrUserOnline));
+            sb.append(". ");
+        }
+        if (hasCall) {
+            sb.append(getString(R.string.AccDescrChatVoiceChatActive));
+            sb.append(". ");
+        }
+        if (showTtl && ttlPeriod > 0) {
+            sb.append(LocaleController.formatString(R.string.AutoDeleteAfter, LocaleController.formatTTLString(ttlPeriod)));
+            sb.append(". ");
+        }
+        if (getIsPinned()) {
+            sb.append(getString(R.string.AccDescrChatPinned));
+            sb.append(". ");
+        }
+        if (hasTags()) {
+            sb.append(tags.getAccessibilityText());
             sb.append(". ");
         }
         if (unreadCount > 0) {
@@ -5555,6 +5592,10 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         }
         if (reactionMentionCount > 0) {
             sb.append(getString(R.string.AccDescrMentionReaction));
+            sb.append(". ");
+        }
+        if (drawPollVotesMention) {
+            sb.append(getString(R.string.AccDescrChatUnreadPollVotes));
             sb.append(". ");
         }
         if (message == null || currentDialogFolderId != 0) {
