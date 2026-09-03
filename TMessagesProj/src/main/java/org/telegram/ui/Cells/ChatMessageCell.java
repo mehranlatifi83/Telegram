@@ -1258,6 +1258,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private final MaskDrawable[] selectorMaskDrawable = new MaskDrawable[2];
     private int[] selectorDrawableMaskType = new int[2];
     private RectF instantButtonRect = new RectF();
+    // where the button under a link preview is, for the tree to point at. The rect the touch code
+    // hit tests against is only filled in for the older style that draws the button on its own
+    // below the preview; the style that draws it inside the preview leaves it empty, and touches
+    // on it are taken by the preview as a whole. Keeping a rect of our own means the button can be
+    // named and reached without giving the touch code a region it never had.
+    private final RectF instantButtonAccessibilityRect = new RectF();
     private LoadingDrawable instantButtonLoading;
     private final int[] pressedState = new int[]{android.R.attr.state_enabled, android.R.attr.state_pressed};
     private float animatingLoadingProgressProgress;
@@ -6518,6 +6524,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             default:
                 return R.string.AccDescrSlotSeven;
         }
+    }
+
+    private boolean hasShowMoreButton() {
+        return currentMessageObject != null && currentMessageObject.richLayout != null
+            && currentMessageObject.richLayout.hasShowMoreButton();
     }
 
     private void didClickedImage() {
@@ -16616,6 +16627,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     SpoilerEffect.layoutDrawMaybe(instantViewLayout, canvas);
                     canvas.restore();
                 }
+                // the whole row under the divider is the button, from the line above it down to
+                // the bottom of the preview
+                instantButtonAccessibilityRect.set(linkX, startY + linkPreviewHeight + dp(2), linkX + width, startY + linkPreviewHeight + dp(42));
             } else {
                 int instantY = startY + linkPreviewHeight + dp(currentMessageObject.isUnsupported() ? -5 : 10);
                 if (instantButtonLoading != null && !loading && !instantButtonLoading.isDisappeared() && !instantButtonLoading.isDisappearing()) {
@@ -16630,6 +16644,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     instantButtonLoading.resetDisappear();
                 }
                 instantButtonRect.set(linkX, instantY, linkX + instantWidth, instantY + dp(36));
+                instantButtonAccessibilityRect.set(instantButtonRect);
                 float scale = instantButtonBounce.getScale(.02f);
                 boolean scaleRestore = scale != 1;
                 if (scaleRestore) {
@@ -27954,6 +27969,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         // that reached up into them would answer for every one of them and hide the lot
         public static final int GIVEAWAY_BUTTONS_START = 300;
         public static final int GIVEAWAY_BUTTONS_END = 400;
+        public static final int SHOW_MORE = 487;
         private Path linkPath = new Path();
         private RectF rectF = new RectF();
         private Rect rect = new Rect();
@@ -28154,12 +28170,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                             sb.append(getString("AccDescrMsgPlayed", R.string.AccDescrMsgPlayed));
                         }
                     }
-                    // the poll of a previous message stays around on a recycled cell, so it is
-                    // only of this message when this message is a poll itself
                     if (lastPoll != null && currentMessageObject.isPoll()) {
-                        sb.append(", ");
-                        sb.append(lastPoll.question.text);
-                        sb.append(", ");
+                        // the poll of a previous message stays around on a recycled cell, so it is
+                        // only of this message when this message is a poll itself, and the kind of
+                        // poll comes before the question, the way it is drawn: the line above the
+                        // question is what says a poll is a poll
                         String title;
                         if (pollClosed) {
                             title = getString("FinalResults", R.string.FinalResults);
@@ -28176,7 +28191,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                 title = getString("AnonymousPoll", R.string.AnonymousPoll);
                             }
                         }
+                        sb.append(", ");
                         sb.append(title);
+                        sb.append(", ");
+                        sb.append(lastPoll.question.text);
                         final CharSequence recentVoters = pollRecentVoterNames(lastPollResultsObj == null ? null : lastPollResultsObj.recent_voters);
                         if (recentVoters != null) {
                             sb.append(", ");
@@ -28545,7 +28563,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         reportedVirtualViewIds.add(GIVEAWAY_BUTTONS_START + g);
                     }
                 }
-                if (drawInstantView && !instantButtonRect.isEmpty()) {
+                // the button that opens the rest of a message cut short. It is drawn by hand
+                // under the text and is no view of its own, so nothing said the message went on,
+                // and there was no way to ask for the rest of it
+                if (hasShowMoreButton()) {
+                    info.addChild(ChatMessageCell.this, SHOW_MORE);
+                }
+                if (drawInstantView && !instantButtonAccessibilityRect.isEmpty()) {
                     info.addChild(ChatMessageCell.this, INSTANT_VIEW);
                     reportedVirtualViewIds.add(INSTANT_VIEW);
                 }
@@ -28951,6 +28975,25 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     rect.offset(pos[0], pos[1]);
                     info.setBoundsInScreen(rect);
                     info.setClickable(true);
+                } else if (virtualViewId == SHOW_MORE) {
+                    if (!hasShowMoreButton()) {
+                        return null;
+                    }
+                    info.setClassName("android.widget.Button");
+                    info.setEnabled(true);
+                    info.setText(getString(R.string.ShowMore));
+                    info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    currentMessageObject.richLayout.getShowMoreBounds(rect);
+                    rect.offset(textX, textY);
+                    info.setBoundsInParent(rect);
+                    // the bounds go into the map the cell hit tests against, so a finger on the
+                    // screen finds it as well as a swipe
+                    if (accessibilityVirtualViewBounds.get(virtualViewId) == null || !accessibilityVirtualViewBounds.get(virtualViewId).equals(rect)) {
+                        accessibilityVirtualViewBounds.put(virtualViewId, new Rect(rect));
+                    }
+                    rect.offset(pos[0], pos[1]);
+                    info.setBoundsInScreen(rect);
+                    info.setClickable(true);
                 } else if (virtualViewId == INSTANT_VIEW) {
                     info.setClassName("android.widget.Button");
                     info.setEnabled(true);
@@ -28958,7 +29001,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         info.setText(instantViewLayout.getText());
                     }
                     info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
-                    instantButtonRect.round(rect);
+                    instantButtonAccessibilityRect.round(rect);
                     info.setBoundsInParent(rect);
                     if (accessibilityVirtualViewBounds.get(virtualViewId) == null || !accessibilityVirtualViewBounds.get(virtualViewId).equals(rect)) {
                         accessibilityVirtualViewBounds.put(virtualViewId, new Rect(rect));
@@ -29205,6 +29248,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);
                     } else if (virtualViewId == POLL_HINT) {
                         didPressVoteHint();
+                    } else if (virtualViewId == SHOW_MORE) {
+                        if (delegate != null && hasShowMoreButton()) {
+                            delegate.didPressShowMore(ChatMessageCell.this);
+                        }
+                        sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);
                     } else if (virtualViewId >= GIVEAWAY_BUTTONS_START && virtualViewId < GIVEAWAY_BUTTONS_END) {
                         if (delegate != null) {
                             delegate.didPressGiveawayChatButton(ChatMessageCell.this, virtualViewId - GIVEAWAY_BUTTONS_START);
