@@ -1,5 +1,7 @@
 package org.telegram.ui;
 
+import org.telegram.messenger.LocaleController;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
 
@@ -1555,6 +1557,7 @@ public class QrActivity extends BaseFragment {
             };
             darkThemeView.setAnimation(darkThemeDrawable);
             darkThemeView.setScaleType(ImageView.ScaleType.CENTER);
+            darkThemeView.setContentDescription(LocaleController.getString(R.string.AccDescrSwitchToNightTheme));
             darkThemeView.setOnClickListener(view -> {
                 if (changeDayNightViewAnimator != null) {
                     return;

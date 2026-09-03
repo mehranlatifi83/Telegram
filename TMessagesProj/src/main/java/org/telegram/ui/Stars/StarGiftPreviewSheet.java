@@ -336,6 +336,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
         headerPlay = new ImageView(context);
         headerPlay.setBackground(Theme.createRadSelectorDrawable(0, 0x10FFFFFF, 16, 16));
         headerPlay.setImageResource(R.drawable.filled_gift_pause_24);
+        headerPlay.setContentDescription(LocaleController.getString(R.string.AccActionPause));
         headerPlay.setScaleType(ImageView.ScaleType.CENTER);
         headerPlay.setOnClickListener(v -> {
             // AndroidUtilities.dumpCanvas(container);

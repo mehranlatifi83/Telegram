@@ -263,6 +263,7 @@ public class RichMediaCell extends RichBlockCell
             AndroidUtilities.updateImageViewImageAnimated(switchModeButton, icon);
         } else {
             switchModeButton.setImageResource(icon);
+        switchModeButton.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
         }
     }
 
@@ -296,6 +297,7 @@ public class RichMediaCell extends RichBlockCell
         while (menuButtons.size() < ms.size()) {
             final ImageView b = createCircleButton();
             b.setImageResource(R.drawable.iv_media_dots);
+        b.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
             b.setOnClickListener(v -> onMenuClicked(menuButtons.indexOf(v)));
             addView(b, LayoutHelper.createFrame(32, 32, Gravity.LEFT | Gravity.TOP));
             menuButtons.add(b);

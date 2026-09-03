@@ -1652,6 +1652,7 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
         dayNightItem.setScaleType(ImageView.ScaleType.CENTER);
         dayNightItem.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarWhiteSelector), Theme.RIPPLE_MASK_CIRCLE_20DP));
         dayNightItem.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
+        dayNightItem.setContentDescription(LocaleController.getString(R.string.AccDescrSwitchToNightTheme));
         dayNightItem.setOnClickListener(v -> {
             toggleTheme();
         });

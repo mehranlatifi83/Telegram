@@ -5356,7 +5356,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         avatarImage.setPivotX(0);
         avatarImage.setPivotY(0);
         avatarContainer.addView(avatarImage, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-        avatarImage.setContentDescription(LocaleController.getString(R.string.AccDescrProfilePicture));
         avatarImage.setOnClickListener(v -> {
             if (avatarBig != null) {
                 return;
