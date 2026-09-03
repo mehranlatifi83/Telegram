@@ -1523,32 +1523,57 @@ public class ItemOptions {
 
     /**
      * A menu of options opens in a window of its own, and the window has nothing to be called by:
-     * it is a plain frame holding a scroller holding the options. A screen reader coming to it
-     * found no words there and fell back on the only name it had, which is the name of the
-     * package the app is installed under, and left its focus sitting on the frame — so the
-     * options themselves had to be gone looking for by hand before any of them could be heard.
+     * it is a plain frame holding a scroller holding the options, and not one of the three has a
+     * word about it. A screen reader arriving at a new window says what the window is, finds
+     * nothing to say, and leaves its focus sitting on the frame — so every option had to be gone
+     * looking for by hand before any of them could be heard.
      *
-     * The focus is put on the first option instead, which is a thing with a name.
+     * The focus is put on the first thing in the menu that has words of its own instead. Where
+     * those words are kept differs from menu to menu: some put their options straight into the
+     * popup's own row of them, others into a container of their own that is then put in. So the
+     * whole of what was shown is walked, and the first thing in it that can say what it is wins.
      */
     private void moveAccessibilityFocusToFirstItem() {
         final AccessibilityManager am = context == null ? null : (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
         if (am == null || !am.isEnabled()) {
             return;
         }
-        final ActionBarPopupWindow.ActionBarPopupWindowLayout menu = lastLayout;
-        if (menu == null) {
+        final View root = layout;
+        if (root == null) {
             return;
         }
-        // after the window has been laid out: there is nothing to put the focus on before that
-        menu.post(() -> {
-            for (int i = 0; i < menu.getItemsCount(); ++i) {
-                final View item = menu.getItemAt(i);
-                if (item != null && item.getVisibility() == View.VISIBLE) {
-                    item.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
-                    return;
+        // once the window has been laid out, and again a moment later: a reader announcing the
+        // window of its own accord can take the focus back, and it does so after we are done
+        root.post(() -> focusFirstNamedChild(root));
+        root.postDelayed(() -> focusFirstNamedChild(root), 350);
+    }
+
+    private static boolean focusFirstNamedChild(View view) {
+        if (view == null || view.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+        if (view.getImportantForAccessibility() == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) {
+            return false;
+        }
+        if (hasWords(view) && view.getImportantForAccessibility() != View.IMPORTANT_FOR_ACCESSIBILITY_NO) {
+            return view.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+        }
+        if (view instanceof ViewGroup) {
+            final ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); ++i) {
+                if (focusFirstNamedChild(group.getChildAt(i))) {
+                    return true;
                 }
             }
-        });
+        }
+        return false;
+    }
+
+    private static boolean hasWords(View view) {
+        if (!TextUtils.isEmpty(view.getContentDescription())) {
+            return true;
+        }
+        return view instanceof TextView && !TextUtils.isEmpty(((TextView) view).getText());
     }
 
     public void setTranslationY(float ty) {
