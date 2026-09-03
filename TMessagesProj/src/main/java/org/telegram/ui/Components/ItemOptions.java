@@ -28,6 +28,8 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
@@ -1506,6 +1508,8 @@ public class ItemOptions {
             (int) (offsetY = (Y + this.translateY))
         );
 
+        moveAccessibilityFocusToFirstItem();
+
         if (longPressSelectionEnabled) {
             installHoverReleaseListener();
         }
@@ -1515,6 +1519,36 @@ public class ItemOptions {
         }
 
         return this;
+    }
+
+    /**
+     * A menu of options opens in a window of its own, and the window has nothing to be called by:
+     * it is a plain frame holding a scroller holding the options. A screen reader coming to it
+     * found no words there and fell back on the only name it had, which is the name of the
+     * package the app is installed under, and left its focus sitting on the frame — so the
+     * options themselves had to be gone looking for by hand before any of them could be heard.
+     *
+     * The focus is put on the first option instead, which is a thing with a name.
+     */
+    private void moveAccessibilityFocusToFirstItem() {
+        final AccessibilityManager am = context == null ? null : (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+        if (am == null || !am.isEnabled()) {
+            return;
+        }
+        final ActionBarPopupWindow.ActionBarPopupWindowLayout menu = lastLayout;
+        if (menu == null) {
+            return;
+        }
+        // after the window has been laid out: there is nothing to put the focus on before that
+        menu.post(() -> {
+            for (int i = 0; i < menu.getItemsCount(); ++i) {
+                final View item = menu.getItemAt(i);
+                if (item != null && item.getVisibility() == View.VISIBLE) {
+                    item.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+                    return;
+                }
+            }
+        });
     }
 
     public void setTranslationY(float ty) {
