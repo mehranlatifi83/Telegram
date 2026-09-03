@@ -5443,6 +5443,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
     }
 
+    boolean hasShowMoreButton() {
+        return currentMessageObject != null && currentMessageObject.richLayout != null
+            && currentMessageObject.richLayout.hasShowMoreButton();
+    }
+
     void didClickedImage() {
         if (currentMessageObject.hasMediaSpoilers() && !currentMessageObject.needDrawBluredPreview() && !currentMessageObject.isMediaSpoilersRevealed) {
             if (delegate != null && currentMessageObject.isSensitive()) {
