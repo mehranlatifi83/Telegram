@@ -6361,6 +6361,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     private static final int SLOT_MACHINE_CODE_POINT = 0x1F3B0;
+    private static final int DARTS_CODE_POINT = 0x1F3AF;
+    private static final int BASKETBALL_CODE_POINT = 0x1F3C0;
+    private static final int FOOTBALL_CODE_POINT = 0x26BD;
+    private static final int BOWLING_CODE_POINT = 0x1F3B3;
 
     /**
      * What a thrown game emoji landed on. The number is the whole of it for most of them; a slot
@@ -6431,18 +6435,58 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return null;
         }
         final String emoji = currentMessageObject.getDiceEmoji();
-        if (new String(Character.toChars(SLOT_MACHINE_CODE_POINT)).equals(emoji)) {
+        if (isDiceEmoji(emoji, SLOT_MACHINE_CODE_POINT)) {
             return slotAccessibilityOutcome(value);
         }
         final StringBuilder sb = new StringBuilder();
         sb.append(value);
-        // which throw counts as a win is the server's to say, and it says it for the games it
-        // knows about. Where it has not said, the number is all there is to give
+        // the number on its own means nothing for a game that is thrown at something: say what
+        // became of the throw as well, in the words the game is played in
+        final int outcome = diceAccessibilityOutcomeWord(emoji, value);
+        if (outcome != 0) {
+            sb.append(", ").append(getString(outcome));
+            return sb;
+        }
+        // for a game this does not know, whether the throw won is the server's to say, and it
+        // says it for the ones it knows about
         final MessagesController.DiceFrameSuccess success = MessagesController.getInstance(currentAccount).diceSuccess.get(emoji);
         if (success != null && success.num == value) {
             sb.append(", ").append(getString(R.string.AccDescrDiceWin));
         }
         return sb;
+    }
+
+    /**
+     * What became of a throw, where the game says so. A die is only a die: it lands on a number
+     * and there is nothing to win, which is why the app itself marks no roll of it a success. The
+     * rest are thrown at something and either got there or did not.
+     */
+    private static int diceAccessibilityOutcomeWord(String emoji, int value) {
+        if (isDiceEmoji(emoji, DARTS_CODE_POINT)) {
+            if (value == 6) {
+                return R.string.AccDescrDiceBullseye;
+            }
+            return value == 1 ? R.string.AccDescrDiceMissed : R.string.AccDescrDiceOnTarget;
+        }
+        if (isDiceEmoji(emoji, BASKETBALL_CODE_POINT)) {
+            return value >= 4 ? R.string.AccDescrDiceScored : R.string.AccDescrDiceMissed;
+        }
+        if (isDiceEmoji(emoji, FOOTBALL_CODE_POINT)) {
+            return value >= 3 ? R.string.AccDescrDiceGoal : R.string.AccDescrDiceMissed;
+        }
+        if (isDiceEmoji(emoji, BOWLING_CODE_POINT)) {
+            if (value == 6) {
+                return R.string.AccDescrDiceStrike;
+            }
+            // how many pins the ones between knock down is not written down anywhere the app can
+            // read, so only the two ends are named and the number speaks for the rest
+            return value == 1 ? R.string.AccDescrDiceMissed : 0;
+        }
+        return 0;
+    }
+
+    private static boolean isDiceEmoji(String emoji, int codePoint) {
+        return new String(Character.toChars(codePoint)).equals(emoji);
     }
 
     // the three reels of a slot machine are packed into the one number, two bits to a reel, the
