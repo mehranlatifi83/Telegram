@@ -162,6 +162,7 @@ public class RichMediaCell extends RichBlockCell
         addButton = createCircleButton();
         addButton.setImageResource(R.drawable.iv_media_add);
         addView(addButton, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 12, 12, 12, 12));
+        addButton.setContentDescription(LocaleController.getString(R.string.Add));
         addButton.setOnClickListener(v -> {
             if (delegate != null && currentRow != null) delegate.onAddMedia(currentRow);
         });

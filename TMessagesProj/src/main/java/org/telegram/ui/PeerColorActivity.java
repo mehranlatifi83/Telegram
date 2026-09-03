@@ -1623,6 +1623,7 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
         backButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarWhiteSelector), Theme.RIPPLE_MASK_CIRCLE_20DP));
         backButton.setImageResource(R.drawable.ic_ab_back);
         backButton.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
+        backButton.setContentDescription(LocaleController.getString(R.string.Back));
         backButton.setOnClickListener(v -> {
             if (onBackPressed(true)) {
                 finishFragment();

@@ -28748,9 +28748,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 if (reactionsLayoutInBubble != null) {
                     reactionsLayoutInBubble.addAccessibilityActions(info);
                 }
-                if (drawSelectionBackground || getBackground() != null) {
-                    info.setSelected(true);
-                }
+                // whether a message has been chosen is said once, by the tick it now carries.
+                // It was said twice: this called it chosen as well, going by the background drawn
+                // behind it rather than by what has actually been chosen, and a cell with any
+                // background at all was called chosen whether it was or not
                 return info;
             } else {
                 AccessibilityNodeInfo info = AccessibilityNodeInfo.obtain();

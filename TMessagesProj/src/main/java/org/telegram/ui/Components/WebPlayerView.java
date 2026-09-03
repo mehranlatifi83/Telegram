@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Components;
 
+import org.telegram.messenger.LocaleController;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -1699,6 +1701,7 @@ public class WebPlayerView extends ViewGroup implements VideoPlayer.VideoPlayerD
             shareButton.setScaleType(ImageView.ScaleType.CENTER);
             shareButton.setImageResource(R.drawable.ic_share_video);
             controlsView.addView(shareButton, LayoutHelper.createFrame(56, 48, Gravity.RIGHT | Gravity.TOP));
+            shareButton.setContentDescription(LocaleController.getString(R.string.ShareFile));
             shareButton.setOnClickListener(v -> {
                 if (delegate != null) {
                     delegate.onSharePressed();
