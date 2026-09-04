@@ -8569,18 +8569,12 @@ public class EmojiView extends FrameLayout implements
         }
 
         public CharSequence getPageTitle(int position) {
-            // which pages there are depends on what the chat allows, so the third page can sit
-            // second. Going by where a tab is rather than by what it opens named it after
-            // whichever page usually stands in that place
-            if (position < 0 || position >= currentTabs.size()) {
-                return null;
-            }
-            switch (currentTabs.get(position).type) {
-                case TAB_EMOJI:
+            switch (position) {
+                case 0:
                     return getString(R.string.Emoji);
-                case TAB_GIFS:
+                case 1:
                     return getString(R.string.AccDescrGIFs);
-                case TAB_STICKERS:
+                case 2:
                     return getString(R.string.AccDescrStickers);
             }
             return null;
