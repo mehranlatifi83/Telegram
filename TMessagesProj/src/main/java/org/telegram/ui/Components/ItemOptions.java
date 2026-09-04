@@ -40,6 +40,8 @@ import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.core.view.ViewCompat;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
@@ -1501,6 +1503,13 @@ public class ItemOptions {
         }
 
         actionBarPopupWindow.setScaleOut(scaleOut);
+        // what the window is called. A screen reader names a window as it opens, and this one had
+        // no name of any kind, so it fell back on the name of the app — which is what was read out
+        // over the top of the option the focus had just been put on, and what it stayed on
+        if (layout != null) {
+            ViewCompat.setAccessibilityPaneTitle(layout, LocaleController.getString(R.string.AccDescrMoreOptions));
+        }
+
         actionBarPopupWindow.showAtLocation(
             container,
             0,
