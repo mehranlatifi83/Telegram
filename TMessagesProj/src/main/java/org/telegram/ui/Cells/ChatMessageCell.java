@@ -28203,10 +28203,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                 messageText = ssb;
                             }
                         }
-                        // where the album is named after what it holds, the kind of this message is
-                        // already in what was just said
                         final CharSequence mediaTitle = currentMessageObject.getMediaTitle(MessageObject.getMedia(currentMessageObject.messageOwner));
-                        final boolean namedByAlbum = albumPlace != null && TextUtils.equals(messageText, mediaTitle);
+                        // a message of an album names itself by its kind, and the album line just
+                        // ahead of it has said that kind already. Leave out only what was said
+                        // there: the word album itself, or the kind. A file names itself by its
+                        // file name, which is neither of those and is the only place it is said
+                        final boolean namedByAlbum = albumPlace != null
+                            && (TextUtils.equals(messageText, getString(R.string.Album))
+                                || TextUtils.equals(messageText, albumAccessibilityKind()));
                         // a poll names itself twice over: once as the kind of message it is, and
                         // again under its question, where the kind is said in full
                         final boolean namedByPoll = currentMessageObject.isPoll() && lastPoll != null
