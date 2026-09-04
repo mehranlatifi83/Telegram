@@ -1358,6 +1358,7 @@ public class ItemOptions {
             public void dismiss() {
                 super.dismiss();
                 ItemOptions.this.dismissDim(container);
+                ItemOptions.this.restoreBehindForScreenReader();
 
                 if (dismissListener != null) {
                     dismissListener.run();
@@ -1520,31 +1521,64 @@ public class ItemOptions {
     }
 
     /**
-     * Put a screen reader on the first option, the way the menu on a message does.
+     * Hand the menu to a screen reader, the way the menu on a message is handed to one.
      *
-     * A menu opens in a window of its own, and a window with nothing focused in it leaves a
-     * reader with nothing to say and nowhere to be: it falls back on naming the app and stays
-     * there, and the options have to be gone looking for by hand. The menu on a message does
-     * three things about this, and all three are needed. Taking the input focus is what brings
-     * the reader out of the state it was left in; asking for the reading focus is what moves it
-     * onto the option; and saying that the option has been focused is what gets it read. Doing
-     * it after the menu has finished appearing is what makes it stick, since a reader announcing
-     * the window of its own accord would otherwise take the focus back afterwards.
+     * A menu opens in a window of its own, and four things have to be true before a reader will
+     * treat that window as the thing it is now looking at. The window has to be able to hold the
+     * input focus, which in touch mode means something in it has to be willing to take focus;
+     * what lies behind has to be out of the way, or the reader has somewhere else it can still
+     * be; something in the menu has to actually take the focus; and it has to be said that it
+     * has. The menu on a message does all four. This one did none of them, so it opened on
+     * nothing: a reader with nothing focused has nothing to say, falls back on naming the window
+     * by the app it belongs to, and stays there.
      */
     public ItemOptions focusFirstItem() {
-        final View first = firstItem();
-        if (first == null) {
+        if (layout == null || actionBarPopupWindow == null) {
             return this;
         }
+        // in touch mode nothing takes the input focus unless it says it is willing to
+        layout.setFocusableInTouchMode(true);
+        hideBehindFromScreenReader(true);
+        final View first = firstItem();
         AndroidUtilities.runOnUIThread(() -> {
             if (actionBarPopupWindow == null || !actionBarPopupWindow.isShowing()) {
                 return;
             }
-            first.requestFocus();
-            first.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
-            first.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
+            layout.requestFocus();
+            if (first != null) {
+                first.requestFocus();
+                first.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+                first.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
+            }
         }, 420);
         return this;
+    }
+
+    // what is behind a menu is still there to be swiped through unless it is put out of reach,
+    // and a reader left with somewhere else to be does not come into the menu at all
+    private void hideBehindFromScreenReader(boolean hide) {
+        final View behind = fragment != null && fragment.getFragmentView() != null
+            ? fragment.getFragmentView()
+            : pointContainer;
+        if (behind == null) {
+            return;
+        }
+        behind.setImportantForAccessibility(hide
+            ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        if (hide) {
+            hiddenBehind = behind;
+        }
+    }
+
+    private View hiddenBehind;
+
+    // and it comes back the moment the menu goes, whichever way the menu went
+    private void restoreBehindForScreenReader() {
+        if (hiddenBehind != null) {
+            hiddenBehind.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+            hiddenBehind = null;
+        }
     }
 
     // where the options were put differs from menu to menu: some go into the row the popup keeps
