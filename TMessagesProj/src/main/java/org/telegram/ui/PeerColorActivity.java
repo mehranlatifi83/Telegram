@@ -1648,11 +1648,18 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
         sunDrawable.setLayerColor("Path 5", color);
         sunDrawable.commitApplyLayerColors();
 
-        dayNightItem = new ImageView(context);
+        // which of the two themes pressing this would take you to, asked each time rather than
+        // settled once: a name fixed when it was made would be wrong for half the life of it
+        dayNightItem = new ImageView(context) {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(info);
+                info.setText(LocaleController.getString(isDark ? R.string.AccDescrSwitchToDayTheme : R.string.AccDescrSwitchToNightTheme));
+            }
+        };
         dayNightItem.setScaleType(ImageView.ScaleType.CENTER);
         dayNightItem.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarWhiteSelector), Theme.RIPPLE_MASK_CIRCLE_20DP));
         dayNightItem.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
-        dayNightItem.setContentDescription(LocaleController.getString(R.string.AccDescrSwitchToNightTheme));
         dayNightItem.setOnClickListener(v -> {
             toggleTheme();
         });
