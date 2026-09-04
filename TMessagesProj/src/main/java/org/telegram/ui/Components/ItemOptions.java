@@ -28,6 +28,8 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
@@ -1515,6 +1517,46 @@ public class ItemOptions {
         }
 
         return this;
+    }
+
+    /**
+     * Put a screen reader on the first option, the way the menu on a message does.
+     *
+     * A menu opens in a window of its own, and a window with nothing focused in it leaves a
+     * reader with nothing to say and nowhere to be: it falls back on naming the app and stays
+     * there, and the options have to be gone looking for by hand. The menu on a message does
+     * three things about this, and all three are needed. Taking the input focus is what brings
+     * the reader out of the state it was left in; asking for the reading focus is what moves it
+     * onto the option; and saying that the option has been focused is what gets it read. Doing
+     * it after the menu has finished appearing is what makes it stick, since a reader announcing
+     * the window of its own accord would otherwise take the focus back afterwards.
+     */
+    public ItemOptions focusFirstItem() {
+        final View first = firstItem();
+        if (first == null) {
+            return this;
+        }
+        AndroidUtilities.runOnUIThread(() -> {
+            if (actionBarPopupWindow == null || !actionBarPopupWindow.isShowing()) {
+                return;
+            }
+            first.requestFocus();
+            first.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+            first.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
+        }, 420);
+        return this;
+    }
+
+    // where the options were put differs from menu to menu: some go into the row the popup keeps
+    // for them, others into a container of their own that is then put in
+    private View firstItem() {
+        if (linearLayout != null && linearLayout.getChildCount() > 0) {
+            return linearLayout.getChildAt(0);
+        }
+        if (lastLayout != null && lastLayout.getItemsCount() > 0) {
+            return lastLayout.getItemAt(0);
+        }
+        return null;
     }
 
     public void setTranslationY(float ty) {
