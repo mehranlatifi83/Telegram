@@ -470,7 +470,6 @@ public final class FloatingToolbar {
             mToArrow.setTint(color);
             mToOverflow.setTint(color);
             mOverflowButtonText.setTextColor(color);
-            mOverflowButtonIcon.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
             mOverflowButtonIcon.setOnClickListener(v -> onBackPressed());
             mOverflowButton.addView(mOverflowButtonIcon, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL | Gravity.LEFT));
             mOverflowButton.addView(mOverflowButtonText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL | Gravity.LEFT, 56, 0, 0, 0));
