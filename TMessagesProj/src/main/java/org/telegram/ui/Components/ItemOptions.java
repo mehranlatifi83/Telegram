@@ -28,8 +28,6 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.accessibility.AccessibilityManager;
-import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
@@ -39,8 +37,6 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
-
-import androidx.core.view.ViewCompat;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -1503,21 +1499,12 @@ public class ItemOptions {
         }
 
         actionBarPopupWindow.setScaleOut(scaleOut);
-        // what the window is called. A screen reader names a window as it opens, and this one had
-        // no name of any kind, so it fell back on the name of the app — which is what was read out
-        // over the top of the option the focus had just been put on, and what it stayed on
-        if (layout != null) {
-            ViewCompat.setAccessibilityPaneTitle(layout, LocaleController.getString(R.string.AccDescrMoreOptions));
-        }
-
         actionBarPopupWindow.showAtLocation(
             container,
             0,
             (int) (offsetX = (X + this.translateX)),
             (int) (offsetY = (Y + this.translateY))
         );
-
-        moveAccessibilityFocusToFirstItem();
 
         if (longPressSelectionEnabled) {
             installHoverReleaseListener();
@@ -1528,61 +1515,6 @@ public class ItemOptions {
         }
 
         return this;
-    }
-
-    /**
-     * A menu of options opens in a window of its own, and the window has nothing to be called by:
-     * it is a plain frame holding a scroller holding the options, and not one of the three has a
-     * word about it. A screen reader arriving at a new window says what the window is, finds
-     * nothing to say, and leaves its focus sitting on the frame — so every option had to be gone
-     * looking for by hand before any of them could be heard.
-     *
-     * The focus is put on the first thing in the menu that has words of its own instead. Where
-     * those words are kept differs from menu to menu: some put their options straight into the
-     * popup's own row of them, others into a container of their own that is then put in. So the
-     * whole of what was shown is walked, and the first thing in it that can say what it is wins.
-     */
-    private void moveAccessibilityFocusToFirstItem() {
-        final AccessibilityManager am = context == null ? null : (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
-        if (am == null || !am.isEnabled()) {
-            return;
-        }
-        final View root = layout;
-        if (root == null) {
-            return;
-        }
-        // once the window has been laid out, and again a moment later: a reader announcing the
-        // window of its own accord can take the focus back, and it does so after we are done
-        root.post(() -> focusFirstNamedChild(root));
-        root.postDelayed(() -> focusFirstNamedChild(root), 350);
-    }
-
-    private static boolean focusFirstNamedChild(View view) {
-        if (view == null || view.getVisibility() != View.VISIBLE) {
-            return false;
-        }
-        if (view.getImportantForAccessibility() == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) {
-            return false;
-        }
-        if (hasWords(view) && view.getImportantForAccessibility() != View.IMPORTANT_FOR_ACCESSIBILITY_NO) {
-            return view.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
-        }
-        if (view instanceof ViewGroup) {
-            final ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); ++i) {
-                if (focusFirstNamedChild(group.getChildAt(i))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static boolean hasWords(View view) {
-        if (!TextUtils.isEmpty(view.getContentDescription())) {
-            return true;
-        }
-        return view instanceof TextView && !TextUtils.isEmpty(((TextView) view).getText());
     }
 
     public void setTranslationY(float ty) {
