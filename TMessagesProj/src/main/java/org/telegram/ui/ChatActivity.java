@@ -39825,10 +39825,7 @@ public class ChatActivity extends BaseFragment implements
                         .setGravity(Gravity.LEFT)
                         .forceBottom(true)
                         .translate(0, -dp(48))
-                        .show()
-                        // the menu on a message puts a reader on its first option; this one
-                        // left it with nothing focused, naming the app and staying there
-                        .focusFirstItem();
+                        .show();
                     return true;
                 }
             }
@@ -39952,10 +39949,7 @@ public class ChatActivity extends BaseFragment implements
                         .setGravity(Gravity.LEFT)
                         .forceBottom(true)
                         .translate(0, -dp(48))
-                        .show()
-                        // the menu on a message puts a reader on its first option; this one
-                        // left it with nothing focused, naming the app and staying there
-                        .focusFirstItem();
+                        .show();
                     return true;
                 }
             }
