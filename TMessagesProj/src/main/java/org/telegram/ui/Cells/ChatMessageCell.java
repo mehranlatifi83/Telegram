@@ -27477,6 +27477,62 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return media != null && media.webpage != null;
     }
 
+    // a channel that signs its posts with the person behind them draws that person's picture
+    // beside every post, and a tap on the picture opens them. The picture is drawn by the cell and
+    // is no view of its own, so touch exploration had nothing to tap: the person was named over
+    // every post and could not be reached from any of them.
+    //
+    // in a group the same picture is held down rather than tapped, and what that opens is a menu
+    // the chat builds. A channel opens no such menu, so what is offered here is the tap itself.
+    private boolean hasSignedPostAuthorAction() {
+        if (!isAvatarVisible || currentMessageObject == null || delegate == null) {
+            return false;
+        }
+        if (currentMessageObject.isSponsored() || currentMessageObject.getDialogId() >= 0) {
+            return false;
+        }
+        final TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-currentMessageObject.getDialogId());
+        if (!ChatObject.isChannelAndNotMegaGroup(chat) || !chat.signature_profiles) {
+            return false;
+        }
+        // a picture standing for a forward whose sender is hidden opens no one
+        return currentUser != null && currentUser.id != 0 || currentChat != null;
+    }
+
+    private CharSequence getSignedPostAuthorActionLabel() {
+        if (currentUser != null) {
+            return getString(R.string.OpenProfile);
+        }
+        if (currentChat != null) {
+            return getString(currentChat.broadcast ? R.string.OpenChannel2 : R.string.OpenGroup2);
+        }
+        return null;
+    }
+
+    // tapped the way the picture is tapped, so that a reader comes to whatever a tap comes to
+    private void performSignedPostAuthorAction() {
+        if (!hasSignedPostAuthorAction()) {
+            return;
+        }
+        if (currentUser != null) {
+            delegate.didPressUserAvatar(this, currentUser, lastTouchX, lastTouchY, false);
+            return;
+        }
+        int id;
+        TLRPC.Chat chat = currentChat;
+        if (currentMessageObject.messageOwner.fwd_from != null) {
+            if ((currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
+                id = currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
+            } else {
+                id = currentMessageObject.messageOwner.fwd_from.channel_post;
+                chat = currentForwardChannel;
+            }
+        } else {
+            id = 0;
+        }
+        delegate.didPressChannelAvatar(this, chat != null ? chat : currentChat, id, lastTouchX, lastTouchY, false);
+    }
+
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
         if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
@@ -27569,6 +27625,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     delegate.didPressCodeCopy(this, copyable.block);
                 }
             }
+        } else if (action == R.id.acc_action_sender_profile) {
+            performSignedPostAuthorAction();
         }
         if (currentMessageObject.isVoice() || currentMessageObject.isRoundVideo() || currentMessageObject.isMusic() && MediaController.getInstance().isPlayingMessage(currentMessageObject)) {
             if (seekBarAccessibilityDelegate.performAccessibilityActionInternal(action, arguments)) {
@@ -28577,6 +28635,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 }
                 if (drawSummarizeButton || drawSummaryReply) {
                     info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_summarize, getString("SummaryTitle", R.string.SummaryTitle)));
+                }
+                if (hasSignedPostAuthorAction()) {
+                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_sender_profile, getSignedPostAuthorActionLabel()));
                 }
 
                 if ((currentMessageObject.isVoice() || currentMessageObject.isRoundVideo() || currentMessageObject.isMusic()) && MediaController.getInstance().isPlayingMessage(currentMessageObject)) {

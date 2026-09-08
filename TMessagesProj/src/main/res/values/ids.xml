@@ -61,6 +61,7 @@
     <item name="acc_action_story_next" type="id"/>
     <item name="acc_action_story_open_reply" type="id"/>
     <item name="acc_action_story_music" type="id"/>
+    <item name="acc_action_sender_profile" type="id"/>
     <item name="shake_animation" type="id"/>
 
     <item name="timeout_callback" type="id"/>
