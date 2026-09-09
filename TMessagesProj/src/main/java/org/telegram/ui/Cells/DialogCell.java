@@ -502,6 +502,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private TLRPC.Chat chat;
     private TLRPC.EncryptedChat encryptedChat;
     private CharSequence lastPrintString;
+    private boolean accessibilityFocusedRow, accessibilityHoveredRow;
     private CharSequence accessibilityStatePrint;
     private boolean accessibilityStateOnline;
     private int accessibilityStateUnread = -1;
@@ -912,6 +913,8 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        accessibilityFocusedRow = false;
+        accessibilityHoveredRow = false;
         isSliding = false;
         drawRevealBackground = false;
         currentRevealProgress = 0.0f;
@@ -3771,12 +3774,13 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
     // only the chat a screen reader is sitting on is spoken to: anything else would talk over
     // whatever is being read further down the list
+    // a row is being read when the reader has asked it for the focus, or the finger is passing
+    // over it, or the framework says the focus sits there. The first two are kept by the row
+    // itself because the framework does not always say so, and they are let go of wherever the
+    // row stops being the one that was read: when the focus is taken away, when the finger
+    // leaves, when the row goes off the screen, and when the row is handed to another chat
     private boolean isReadOutByAccessibility() {
-        // where the focus sits is asked of the framework and of nothing else. A row keeping a
-        // note of its own goes stale: the note is not always cleared when the focus leaves, and
-        // the row is handed to another chat as the list moves, so a row would go on speaking for
-        // a chat that is no longer being read
-        if (!isAccessibilityFocused()) {
+        if (!accessibilityFocusedRow && !accessibilityHoveredRow && !isAccessibilityFocused()) {
             return false;
         }
         final AccessibilityManager am = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
@@ -3811,9 +3815,12 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         final int reactionMentions = reactionMentionCount;
         final int sendState = getAccessibilitySendState();
         // the row is used again for another chat, and what the last one was doing is nothing to
-        // say about this one
+        // say about this one. Nor is being read: whoever was reading it was reading the chat that
+        // was here before
         if (accessibilityStateDialogId != currentDialogId) {
             accessibilityStateDialogId = currentDialogId;
+            accessibilityFocusedRow = false;
+            accessibilityHoveredRow = false;
         } else if (isReadOutByAccessibility()) {
             final StringBuilder changed = new StringBuilder();
             // what the other side is doing right now: writing, recording a voice, sending a
@@ -5615,6 +5622,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
+        if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
+            accessibilityFocusedRow = true;
+        } else if (action == AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS) {
+            accessibilityFocusedRow = false;
+        }
         if (action == R.id.acc_action_chat_preview && parentFragment != null) {
             parentFragment.showChatPreview(this);
             return true;
@@ -5624,6 +5636,17 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             return true;
         }
         return super.performAccessibilityAction(action, arguments);
+    }
+
+    @Override
+    public boolean onHoverEvent(MotionEvent event) {
+        final int action = event.getAction();
+        if (action == MotionEvent.ACTION_HOVER_ENTER || action == MotionEvent.ACTION_HOVER_MOVE) {
+            accessibilityHoveredRow = true;
+        } else if (action == MotionEvent.ACTION_HOVER_EXIT) {
+            accessibilityHoveredRow = false;
+        }
+        return super.onHoverEvent(event);
     }
 
     @Override
