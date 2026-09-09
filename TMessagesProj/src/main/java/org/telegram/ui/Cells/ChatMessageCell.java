@@ -6570,7 +6570,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         // a picture or a video already here opens rather than plays, and by then the button
         // drawn over it is gone, so there is no icon left to go by
-        return hasMediaToOpen() ? getString(R.string.Open) : null;
+        if (hasMediaToOpen()) {
+            return getString(R.string.Open);
+        }
+        return pressOpensMessageOptions() ? getString(R.string.AccActionMessageOptions) : null;
     }
 
     private boolean hasMediaToOpen() {
@@ -6588,6 +6591,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     // the very path a press takes, so that asking for it by name reaches the same place
     private void performMediaAccessibilityClick() {
         if (currentMessageObject == null) {
+            return;
+        }
+        if (pressOpensMessageOptions()) {
+            if (delegate != null) {
+                delegate.didPressOther(this, otherX, otherY);
+            }
             return;
         }
         final int icon = getIconForAccessibilityClick();
@@ -27686,6 +27695,20 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return;
         }
         delegate.didPressChannelAvatar(this, signedPostAuthorTargetChat(), signedPostAuthorTargetPostId(), lastTouchX, lastTouchY, false);
+    }
+
+    // a message that holds nothing to open answers a press with nothing at all: a text message,
+    // and a poll or a checklist, whose answers are pressed on their own and whose card is not.
+    // What a press on the screen does to such a message is hold it, and what holding it opens is
+    // the menu of the message, so that is what a press asks for here, and it says so.
+    private boolean pressOpensMessageOptions() {
+        if (currentMessageObject == null || drawVideoImageButton) {
+            return false;
+        }
+        if (currentMessageObject.type != MessageObject.TYPE_TEXT && currentMessageObject.type != MessageObject.TYPE_POLL) {
+            return false;
+        }
+        return getIconForCurrentState() == MediaActionDrawable.ICON_NONE;
     }
 
     @Override
