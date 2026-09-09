@@ -502,7 +502,10 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private TLRPC.Chat chat;
     private TLRPC.EncryptedChat encryptedChat;
     private CharSequence lastPrintString;
-    private boolean accessibilityFocusedRow, accessibilityHoveredRow;
+    // the one row a screen reader is on. Kept for the class rather than for each row so that a
+    // row falling silent needs nothing to be delivered to it: the moment another row is reached,
+    // the one before it is no longer the row being read, whether or not it was ever told so
+    private static DialogCell accessibilityReadRow;
     private CharSequence accessibilityStatePrint;
     private boolean accessibilityStateOnline;
     private int accessibilityStateUnread = -1;
@@ -913,8 +916,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        accessibilityFocusedRow = false;
-        accessibilityHoveredRow = false;
+        releaseAccessibilityReadRow();
         isSliding = false;
         drawRevealBackground = false;
         currentRevealProgress = 0.0f;
@@ -3772,15 +3774,14 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private GradientDrawable archiveFadeGradientDrawable;
     private int archiveFadeGradientDrawableColor;
 
-    // only the chat a screen reader is sitting on is spoken to: anything else would talk over
-    // whatever is being read further down the list
-    // a row is being read when the reader has asked it for the focus, or the finger is passing
-    // over it, or the framework says the focus sits there. The first two are kept by the row
-    // itself because the framework does not always say so, and they are let go of wherever the
-    // row stops being the one that was read: when the focus is taken away, when the finger
-    // leaves, when the row goes off the screen, and when the row is handed to another chat
+    // only the one row a reader is on is spoken to. A row becomes that row when the reader asks
+    // it for the focus or the finger comes onto it, and stops being it the moment another row is
+    // reached, or the focus is taken away, or the finger leaves, or the row goes off the screen,
+    // or the row is handed to another chat. Kept for the class rather than for each row so that
+    // the row before the one being read falls silent on its own, without anything having to
+    // reach it, since what reaches a row is not certain
     private boolean isReadOutByAccessibility() {
-        if (!accessibilityFocusedRow && !accessibilityHoveredRow && !isAccessibilityFocused()) {
+        if (accessibilityReadRow != this || !isShown()) {
             return false;
         }
         final AccessibilityManager am = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
@@ -3822,17 +3823,13 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         // was here before
         if (accessibilityStateDialogId != currentDialogId) {
             accessibilityStateDialogId = currentDialogId;
-            accessibilityFocusedRow = false;
-            accessibilityHoveredRow = false;
+            releaseAccessibilityReadRow();
         } else if (isReadOutByAccessibility()) {
             final StringBuilder changed = new StringBuilder();
             // what the other side is doing right now: writing, recording a voice, sending a
             // picture, playing a game. The app has a line for each of them and it is that line
-            // that is said, so a new kind of doing needs nothing added here. Where the framework
-            // can carry it as the state of the row it is left to do that, and this is for the
-            // older versions that cannot
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R
-                && !TextUtils.isEmpty(print) && !TextUtils.equals(print, accessibilityStatePrint)) {
+            // that is said, so a new kind of doing needs nothing added here
+            if (!TextUtils.isEmpty(print) && !TextUtils.equals(print, accessibilityStatePrint)) {
                 appendAccessibilityStateChange(changed, print);
             }
             if (online && !accessibilityStateOnline) {
@@ -3856,28 +3853,12 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 announceForAccessibility(changed);
             }
         }
-        updateAccessibilityStateDescription(print);
         accessibilityStatePrint = print;
         accessibilityStateOnline = online;
         accessibilityStateUnread = unread;
         accessibilityStateMentions = mentions;
         accessibilityStateReactionMentions = reactionMentions;
         accessibilityStateSendState = sendState;
-    }
-
-    // Android has a way of its own for something that changes under a reader: the state of a row.
-    // A screen reader says it again by itself when it changes, and only for the row the reader is
-    // on. Nothing has to be known here about where the focus sits and nothing has to be sent, so
-    // it holds where saying it ourselves does not, and what somebody is doing is carried that way
-    // wherever the version of Android has it
-    private void updateAccessibilityStateDescription(CharSequence print) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            return;
-        }
-        final CharSequence state = TextUtils.isEmpty(print) ? null : print;
-        if (!TextUtils.equals(state, getStateDescription())) {
-            setStateDescription(state);
-        }
     }
 
     private void appendAccessibilityStateChange(StringBuilder sb, CharSequence text) {
@@ -5645,9 +5626,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
         if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
-            accessibilityFocusedRow = true;
+            accessibilityReadRow = this;
         } else if (action == AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS) {
-            accessibilityFocusedRow = false;
+            releaseAccessibilityReadRow();
         }
         if (action == R.id.acc_action_chat_preview && parentFragment != null) {
             parentFragment.showChatPreview(this);
@@ -5664,11 +5645,17 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     public boolean onHoverEvent(MotionEvent event) {
         final int action = event.getAction();
         if (action == MotionEvent.ACTION_HOVER_ENTER || action == MotionEvent.ACTION_HOVER_MOVE) {
-            accessibilityHoveredRow = true;
+            accessibilityReadRow = this;
         } else if (action == MotionEvent.ACTION_HOVER_EXIT) {
-            accessibilityHoveredRow = false;
+            releaseAccessibilityReadRow();
         }
         return super.onHoverEvent(event);
+    }
+
+    private void releaseAccessibilityReadRow() {
+        if (accessibilityReadRow == this) {
+            accessibilityReadRow = null;
+        }
     }
 
     @Override
