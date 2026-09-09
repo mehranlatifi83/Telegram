@@ -3798,7 +3798,12 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         if (isForumCell() || !isDialogCell && !isTopic) {
             return null;
         }
-        final CharSequence print = MessagesController.getInstance(currentAccount).getPrintingString(currentDialogId, getTopicId(), true);
+        // asked for the way the header of a chat asks for it, not the way the list asks. The list
+        // is refused what somebody is doing where that somebody keeps their last seen to
+        // themselves, and the header is not, so opening the chat tells what the list would not.
+        // A reader sitting on the row is told what the same person is told a moment later by
+        // opening the chat, rather than less
+        final CharSequence print = MessagesController.getInstance(currentAccount).getPrintingString(currentDialogId, getTopicId(), false);
         if (TextUtils.isEmpty(print)) {
             return null;
         }
