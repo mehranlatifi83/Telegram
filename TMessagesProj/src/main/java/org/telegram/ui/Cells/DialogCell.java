@@ -505,6 +505,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private CharSequence accessibilityStatePrint;
     private boolean accessibilityStateOnline;
     private int accessibilityStateUnread = -1;
+    private int accessibilityStateMentions = -1;
+    private int accessibilityStateReactionMentions = -1;
+    private int accessibilityStateSendState = Integer.MIN_VALUE;
     private long accessibilityStateDialogId;
     private int printingStringType;
     private boolean draftVoice;
@@ -3783,22 +3786,93 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         final CharSequence print = lastPrintString;
         final boolean online = isOnline();
         final int unread = unreadCount;
+        final int mentions = mentionCount;
+        final int reactionMentions = reactionMentionCount;
+        final int sendState = getAccessibilitySendState();
         // the row is used again for another chat, and what the last one was doing is nothing to
         // say about this one
         if (accessibilityStateDialogId != currentDialogId) {
             accessibilityStateDialogId = currentDialogId;
         } else if (isReadOutByAccessibility()) {
+            final StringBuilder changed = new StringBuilder();
+            // what the other side is doing right now: writing, recording a voice, sending a
+            // picture, playing a game. The app has a line for each of them and it is that line
+            // that is said, so a new kind of doing needs nothing added here
             if (!TextUtils.isEmpty(print) && !TextUtils.equals(print, accessibilityStatePrint)) {
-                announceForAccessibility(print);
-            } else if (online && !accessibilityStateOnline) {
-                announceForAccessibility(getString(R.string.AccDescrUserOnline));
-            } else if (accessibilityStateUnread >= 0 && unread > accessibilityStateUnread) {
-                announceForAccessibility(LocaleController.formatPluralString("NewMessages", unread));
+                appendAccessibilityStateChange(changed, print);
+            }
+            if (online && !accessibilityStateOnline) {
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrUserOnline));
+            }
+            if (accessibilityStateUnread >= 0 && unread > accessibilityStateUnread) {
+                appendAccessibilityStateChange(changed, LocaleController.formatPluralString("NewMessages", unread));
+            }
+            if (accessibilityStateMentions >= 0 && mentions > accessibilityStateMentions) {
+                appendAccessibilityStateChange(changed, LocaleController.formatPluralString("AccDescrMentionCount", mentions));
+            }
+            if (accessibilityStateReactionMentions >= 0 && reactionMentions > accessibilityStateReactionMentions) {
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrMentionReaction));
+            }
+            // our own last message goes from being sent to having arrived to having been seen,
+            // and the ticks beside it are the whole of what says so
+            if (accessibilityStateSendState != Integer.MIN_VALUE && sendState != accessibilityStateSendState) {
+                appendAccessibilityStateChange(changed, getAccessibilitySendStateText(sendState));
+            }
+            if (changed.length() > 0) {
+                announceForAccessibility(changed);
             }
         }
         accessibilityStatePrint = print;
         accessibilityStateOnline = online;
         accessibilityStateUnread = unread;
+        accessibilityStateMentions = mentions;
+        accessibilityStateReactionMentions = reactionMentions;
+        accessibilityStateSendState = sendState;
+    }
+
+    private void appendAccessibilityStateChange(StringBuilder sb, CharSequence text) {
+        if (TextUtils.isEmpty(text)) {
+            return;
+        }
+        if (sb.length() > 0) {
+            sb.append(", ");
+        }
+        sb.append(text);
+    }
+
+    private static final int ACC_SEND_STATE_NONE = 0;
+    private static final int ACC_SEND_STATE_SENDING = 1;
+    private static final int ACC_SEND_STATE_SENT = 2;
+    private static final int ACC_SEND_STATE_SEEN = 3;
+    private static final int ACC_SEND_STATE_ERROR = 4;
+
+    private int getAccessibilitySendState() {
+        if (drawError) {
+            return ACC_SEND_STATE_ERROR;
+        }
+        if (drawClock) {
+            return ACC_SEND_STATE_SENDING;
+        }
+        if (drawCheck2) {
+            return drawCheck1 ? ACC_SEND_STATE_SEEN : ACC_SEND_STATE_SENT;
+        }
+        return ACC_SEND_STATE_NONE;
+    }
+
+    private CharSequence getAccessibilitySendStateText(int sendState) {
+        switch (sendState) {
+            case ACC_SEND_STATE_ERROR:
+                return getString(R.string.AccDescrMsgSendingError);
+            case ACC_SEND_STATE_SENDING:
+                return getString(R.string.AccDescrMsgSending);
+            case ACC_SEND_STATE_SENT:
+                return getString(R.string.AccDescrMsgUnread);
+            case ACC_SEND_STATE_SEEN:
+                return getString(R.string.AccDescrMsgRead);
+        }
+        // a message that came from the other side carries no ticks, and there is nothing to say
+        // about it here
+        return null;
     }
 
     @SuppressLint("DrawAllocation")
