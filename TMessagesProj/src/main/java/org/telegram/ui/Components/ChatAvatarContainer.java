@@ -1302,10 +1302,10 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                     animatedSubtitleTextView.setTextColor(overrideSubtitleColor);
                 }
             }
+            announceSubtitleChange(newSubtitle);
         } else {
             lastSubtitle = newSubtitle;
         }
-        announceSubtitleChange(newSubtitle);
         checkActionBar(animated);
     }
 
@@ -1321,6 +1321,11 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     // being read: anywhere else it would talk over the messages.
     private void announceSubtitleChange(CharSequence newSubtitle) {
         if (TextUtils.isEmpty(newSubtitle) || TextUtils.equals(newSubtitle, announcedSubtitle)) {
+            return;
+        }
+        // the header can be showing something else of its own for a while, and what is kept for
+        // afterwards is not what anyone is reading
+        if (getSubtitleTextView() == null || getSubtitleTextView().getVisibility() != VISIBLE) {
             return;
         }
         final CharSequence previous = announcedSubtitle;
