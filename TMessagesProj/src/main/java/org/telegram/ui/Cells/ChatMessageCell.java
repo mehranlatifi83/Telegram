@@ -1284,6 +1284,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private boolean accessibilityTextMediaDownloaded;
     private int accessibilityStateMessageId = Integer.MIN_VALUE;
     private boolean accessibilityStateDownloaded, accessibilityStateContentUnread, accessibilityStateUnread;
+    private CharSequence accessibilityStateReactions;
     private boolean wasTranscriptionOpen;
     private Path instantLinkArrowPath;
     private Paint instantLinkArrowPaint;
@@ -21036,23 +21037,81 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         final boolean downloaded = hasAccessibilityDownloadState() && isMediaDownloadedForAccessibility();
         final boolean contentUnread = currentMessageObject.isContentUnread();
         final boolean unread = currentMessageObject.isOut() && !currentMessageObject.scheduled && currentMessageObject.isUnread();
+        final CharSequence reactions = saysReactionChanges() ? getReactionsAccessibilityState() : null;
         final int id = currentMessageObject.getId();
         // a cell is used again for another message, and what the last one was doing is nothing to
         // say about this one
         if (accessibilityStateMessageId != id) {
             accessibilityStateMessageId = id;
         } else if (isReadOutByAccessibility()) {
+            final StringBuilder changed = new StringBuilder();
             if (downloaded && !accessibilityStateDownloaded) {
-                announceForAccessibility(getString(R.string.AccDescrMediaDownloaded));
-            } else if (!contentUnread && accessibilityStateContentUnread) {
-                announceForAccessibility(getString(R.string.AccDescrMsgPlayed));
-            } else if (!unread && accessibilityStateUnread) {
-                announceForAccessibility(getString(R.string.AccDescrMsgRead));
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrMediaDownloaded));
+            }
+            if (!contentUnread && accessibilityStateContentUnread) {
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrMsgPlayed));
+            }
+            if (!unread && accessibilityStateUnread) {
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrMsgRead));
+            }
+            if (!TextUtils.isEmpty(reactions) && !TextUtils.equals(reactions, accessibilityStateReactions)) {
+                appendAccessibilityStateChange(changed, reactions);
+            }
+            if (changed.length() > 0) {
+                announceForAccessibility(changed);
             }
         }
         accessibilityStateDownloaded = downloaded;
         accessibilityStateContentUnread = contentUnread;
         accessibilityStateUnread = unread;
+        accessibilityStateReactions = reactions;
+    }
+
+    private void appendAccessibilityStateChange(StringBuilder sb, CharSequence text) {
+        if (TextUtils.isEmpty(text)) {
+            return;
+        }
+        if (sb.length() > 0) {
+            sb.append(", ");
+        }
+        sb.append(text);
+    }
+
+    // a reaction arriving is something that happens to a message while it sits there, and it is
+    // drawn under it without a word said. In a channel they arrive by the hundred and would talk
+    // over everything else, so this is for the chats where a reaction is one person answering
+    private boolean saysReactionChanges() {
+        if (currentMessageObject == null) {
+            return false;
+        }
+        final long did = currentMessageObject.getDialogId();
+        if (did >= 0) {
+            return true;
+        }
+        return !ChatObject.isChannelAndNotMegaGroup(MessagesController.getInstance(currentAccount).getChat(-did));
+    }
+
+    // the reactions as they now stand, in the form the message itself reads them out in: what is
+    // under the message and how many gave each of them
+    private CharSequence getReactionsAccessibilityState() {
+        if (currentMessageObject == null || currentMessageObject.messageOwner.reactions == null || currentMessageObject.messageOwner.reactions.results == null) {
+            return null;
+        }
+        final StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < currentMessageObject.messageOwner.reactions.results.size(); ++i) {
+            final TLRPC.ReactionCount reactionCount = currentMessageObject.messageOwner.reactions.results.get(i);
+            if (reactionCount == null || reactionCount.count <= 0) {
+                continue;
+            }
+            final String emoticon = reactionCount.reaction instanceof TLRPC.TL_reactionEmoji
+                ? ((TLRPC.TL_reactionEmoji) reactionCount.reaction).emoticon
+                : getString(R.string.AccDescrCustomEmoji);
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(emoticon).append(" ").append(reactionCount.count);
+        }
+        return sb.length() > 0 ? sb : null;
     }
 
     public void drawInternal(Canvas canvas) {
