@@ -49,6 +49,7 @@ import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.Interpolator;
 import android.view.animation.OvershootInterpolator;
@@ -501,6 +502,10 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private TLRPC.Chat chat;
     private TLRPC.EncryptedChat encryptedChat;
     private CharSequence lastPrintString;
+    private CharSequence accessibilityStatePrint;
+    private boolean accessibilityStateOnline;
+    private int accessibilityStateUnread = -1;
+    private long accessibilityStateDialogId;
     private int printingStringType;
     private boolean draftVoice;
     private TLRPC.DraftMessage draftMessage;
@@ -3762,6 +3767,42 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
     @SuppressLint("DrawAllocation")
     @Override
+    // only the chat a screen reader is sitting on is spoken to: anything else would talk over
+    // whatever is being read further down the list
+    private boolean isReadOutByAccessibility() {
+        if (!isAccessibilityFocused()) {
+            return false;
+        }
+        final AccessibilityManager am = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+        return am != null && am.isEnabled() && am.isTouchExplorationEnabled();
+    }
+
+    // a chat changes under the reader: someone comes online, someone starts writing, a message
+    // arrives. The row is drawn again for every one of them, and the words a reader is given are
+    // built again only the next time the row is reached, so a reader sitting on a chat heard
+    // nothing of it. Say the piece that changed, and nothing else.
+    private void checkAccessibilityStateChanges() {
+        final CharSequence print = lastPrintString;
+        final boolean online = isOnline();
+        final int unread = unreadCount;
+        // the row is used again for another chat, and what the last one was doing is nothing to
+        // say about this one
+        if (accessibilityStateDialogId != currentDialogId) {
+            accessibilityStateDialogId = currentDialogId;
+        } else if (isReadOutByAccessibility()) {
+            if (!TextUtils.isEmpty(print) && !TextUtils.equals(print, accessibilityStatePrint)) {
+                announceForAccessibility(print);
+            } else if (online && !accessibilityStateOnline) {
+                announceForAccessibility(getString(R.string.AccDescrUserOnline));
+            } else if (accessibilityStateUnread >= 0 && unread > accessibilityStateUnread) {
+                announceForAccessibility(LocaleController.formatPluralString("NewMessages", unread));
+            }
+        }
+        accessibilityStatePrint = print;
+        accessibilityStateOnline = online;
+        accessibilityStateUnread = unread;
+    }
+
     protected void onDraw(Canvas canvas) {
         if (currentDialogId == 0 && customDialog == null) {
             return;
@@ -3769,6 +3810,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         if (!visibleOnScreen) {
             return;
         }
+        checkAccessibilityStateChanges();
 
         boolean needInvalidate = false;
 
