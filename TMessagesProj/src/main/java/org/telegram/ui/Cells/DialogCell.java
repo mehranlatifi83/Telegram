@@ -3786,8 +3786,24 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     // arrives. The row is drawn again for every one of them, and the words a reader is given are
     // built again only the next time the row is reached, so a reader sitting on a chat heard
     // nothing of it. Say the piece that changed, and nothing else.
+    // what the other side is doing is asked for where the row asks for it. The words the row
+    // draws are built only when it is told to build its layout again, and it is not always told:
+    // a chat can go from writing to recording a voice while the row keeps the words it had
+    private CharSequence getAccessibilityPrintingString() {
+        if (isForumCell() || !isDialogCell && !isTopic) {
+            return null;
+        }
+        final CharSequence print = MessagesController.getInstance(currentAccount).getPrintingString(currentDialogId, getTopicId(), true);
+        if (TextUtils.isEmpty(print)) {
+            return null;
+        }
+        // the dots of "typing..." are a picture of waiting and are not read out, and the mark a
+        // name is put into is not a word either
+        return TextUtils.replace(print, new String[]{"...", "**oo**"}, new String[]{"", ""});
+    }
+
     private void checkAccessibilityStateChanges() {
-        final CharSequence print = lastPrintString;
+        final CharSequence print = getAccessibilityPrintingString();
         final boolean online = isOnline();
         final int unread = unreadCount;
         final int mentions = mentionCount;
