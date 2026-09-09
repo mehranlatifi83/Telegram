@@ -3825,8 +3825,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             final StringBuilder changed = new StringBuilder();
             // what the other side is doing right now: writing, recording a voice, sending a
             // picture, playing a game. The app has a line for each of them and it is that line
-            // that is said, so a new kind of doing needs nothing added here
-            if (!TextUtils.isEmpty(print) && !TextUtils.equals(print, accessibilityStatePrint)) {
+            // that is said, so a new kind of doing needs nothing added here. Where the framework
+            // can carry it as the state of the row it is left to do that, and this is for the
+            // older versions that cannot
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+                && !TextUtils.isEmpty(print) && !TextUtils.equals(print, accessibilityStatePrint)) {
                 appendAccessibilityStateChange(changed, print);
             }
             if (online && !accessibilityStateOnline) {
@@ -3850,12 +3853,28 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 announceForAccessibility(changed);
             }
         }
+        updateAccessibilityStateDescription(print);
         accessibilityStatePrint = print;
         accessibilityStateOnline = online;
         accessibilityStateUnread = unread;
         accessibilityStateMentions = mentions;
         accessibilityStateReactionMentions = reactionMentions;
         accessibilityStateSendState = sendState;
+    }
+
+    // Android has a way of its own for something that changes under a reader: the state of a row.
+    // A screen reader says it again by itself when it changes, and only for the row the reader is
+    // on. Nothing has to be known here about where the focus sits and nothing has to be sent, so
+    // it holds where saying it ourselves does not, and what somebody is doing is carried that way
+    // wherever the version of Android has it
+    private void updateAccessibilityStateDescription(CharSequence print) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return;
+        }
+        final CharSequence state = TextUtils.isEmpty(print) ? null : print;
+        if (!TextUtils.equals(state, getStateDescription())) {
+            setStateDescription(state);
+        }
     }
 
     private void appendAccessibilityStateChange(StringBuilder sb, CharSequence text) {
