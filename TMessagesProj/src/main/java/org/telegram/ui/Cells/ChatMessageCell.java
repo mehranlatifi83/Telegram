@@ -26973,6 +26973,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 }
 
                 instantButtonRect.set(textX, instantY, textX + instantWidth, instantY + dp(44));
+                // a poll draws its button here rather than under a link preview, and the place
+                // kept for the tree was only ever filled over there: the button that opens who
+                // voted, or sends the answers of a poll that takes more than one, stood in the
+                // message with nothing in the tree to reach it by
+                instantButtonAccessibilityRect.set(instantButtonRect);
                 if (selectorDrawable[0] != null && selectorDrawableMaskType[0] == 2) {
                     selectorDrawable[0].setBounds(textX - dp(pollInstantViewTouchesBottom ? 6 : 0), instantY, textX + instantWidth, instantY + dp(44));
                     selectorDrawable[0].draw(canvas);
