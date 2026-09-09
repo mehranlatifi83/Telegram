@@ -502,6 +502,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private TLRPC.Chat chat;
     private TLRPC.EncryptedChat encryptedChat;
     private CharSequence lastPrintString;
+    private boolean accessibilityFocusedRow, accessibilityHoveredRow;
     private CharSequence accessibilityStatePrint;
     private boolean accessibilityStateOnline;
     private int accessibilityStateUnread = -1;
@@ -2950,6 +2951,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         }
         updateThumbsPosition();
         updateAccessibilityText();
+        checkAccessibilityStateChanges();
     }
 
     public void setTitleOverride(String s) {
@@ -3771,7 +3773,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     // only the chat a screen reader is sitting on is spoken to: anything else would talk over
     // whatever is being read further down the list
     private boolean isReadOutByAccessibility() {
-        if (!isAccessibilityFocused()) {
+        // a row learns it is being read in three ways, and any of them will do: the reader asked
+        // for it, the finger is on it, or the framework says the focus sits there
+        if (!accessibilityFocusedRow && !accessibilityHoveredRow && !isAccessibilityFocused()) {
             return false;
         }
         final AccessibilityManager am = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
@@ -3819,7 +3823,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 appendAccessibilityStateChange(changed, getAccessibilitySendStateText(sendState));
             }
             if (changed.length() > 0) {
-                announceForAccessibility(changed);
+                // said as the app says everything else it wants heard at once, rather than
+                // through the row, which is a view that is taken away and given to another chat
+                AndroidUtilities.makeAccessibilityAnnouncement(changed);
             }
         }
         accessibilityStatePrint = print;
@@ -5594,6 +5600,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
+        if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
+            accessibilityFocusedRow = true;
+        } else if (action == AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS) {
+            accessibilityFocusedRow = false;
+        }
         if (action == R.id.acc_action_chat_preview && parentFragment != null) {
             parentFragment.showChatPreview(this);
             return true;
@@ -5603,6 +5614,17 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             return true;
         }
         return super.performAccessibilityAction(action, arguments);
+    }
+
+    @Override
+    public boolean onHoverEvent(MotionEvent event) {
+        final int action = event.getAction();
+        if (action == MotionEvent.ACTION_HOVER_ENTER || action == MotionEvent.ACTION_HOVER_MOVE) {
+            accessibilityHoveredRow = true;
+        } else if (action == MotionEvent.ACTION_HOVER_EXIT) {
+            accessibilityHoveredRow = false;
+        }
+        return super.onHoverEvent(event);
     }
 
     @Override
