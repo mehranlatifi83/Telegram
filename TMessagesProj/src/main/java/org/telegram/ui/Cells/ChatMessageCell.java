@@ -27499,14 +27499,48 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return currentUser != null && currentUser.id != 0 || currentChat != null;
     }
 
+    // the chat a tap on the picture is answered with. A post forwarded into the channel opens
+    // where it came from; anything else stays with the channel the post was made in
+    private TLRPC.Chat signedPostAuthorTargetChat() {
+        TLRPC.Chat chat = currentChat;
+        if (currentMessageObject != null && currentMessageObject.messageOwner.fwd_from != null
+            && (currentMessageObject.messageOwner.fwd_from.flags & 16) == 0 && currentForwardChannel != null) {
+            chat = currentForwardChannel;
+        }
+        return chat != null ? chat : currentChat;
+    }
+
+    private int signedPostAuthorTargetPostId() {
+        if (currentMessageObject == null || currentMessageObject.messageOwner.fwd_from == null) {
+            return 0;
+        }
+        if ((currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
+            return currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
+        }
+        return currentMessageObject.messageOwner.fwd_from.channel_post;
+    }
+
+    // named by what the tap opens and not by what the picture is drawn in. A channel that signs
+    // its posts keeps itself as the chat of every cell and names the person only in the message,
+    // so a name taken from the cell called opening a person opening a channel.
     private CharSequence getSignedPostAuthorActionLabel() {
         if (currentUser != null) {
             return getString(R.string.OpenProfile);
         }
-        if (currentChat != null) {
-            return getString(currentChat.broadcast ? R.string.OpenChannel2 : R.string.OpenGroup2);
+        final TLRPC.Chat target = signedPostAuthorTargetChat();
+        if (target != null && target.signature_profiles && currentMessageObject != null) {
+            final long did = DialogObject.getPeerDialogId(currentMessageObject.messageOwner.from_id);
+            // the channel signing in its own name opens its own page, which is a profile as much
+            // as a person's is
+            if (did > 0 || did == currentMessageObject.getDialogId()) {
+                return getString(R.string.OpenProfile);
+            }
+            if (did < 0) {
+                final TLRPC.Chat signer = MessagesController.getInstance(currentAccount).getChat(-did);
+                return getString(ChatObject.isChannelAndNotMegaGroup(signer) ? R.string.OpenChannel2 : R.string.OpenGroup2);
+            }
         }
-        return null;
+        return getString(ChatObject.isChannelAndNotMegaGroup(target) ? R.string.OpenChannel2 : R.string.OpenGroup2);
     }
 
     // tapped the way the picture is tapped, so that a reader comes to whatever a tap comes to
@@ -27518,19 +27552,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             delegate.didPressUserAvatar(this, currentUser, lastTouchX, lastTouchY, false);
             return;
         }
-        int id;
-        TLRPC.Chat chat = currentChat;
-        if (currentMessageObject.messageOwner.fwd_from != null) {
-            if ((currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
-                id = currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
-            } else {
-                id = currentMessageObject.messageOwner.fwd_from.channel_post;
-                chat = currentForwardChannel;
-            }
-        } else {
-            id = 0;
-        }
-        delegate.didPressChannelAvatar(this, chat != null ? chat : currentChat, id, lastTouchX, lastTouchY, false);
+        delegate.didPressChannelAvatar(this, signedPostAuthorTargetChat(), signedPostAuthorTargetPostId(), lastTouchX, lastTouchY, false);
     }
 
     @Override
