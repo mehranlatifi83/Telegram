@@ -5867,8 +5867,18 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         // three were passed over here, because this text is put together again from the message
         // rather than taken from what is on the screen. So a chat somebody was typing in, a chat
         // holding a draft, and a forum all read as their last message and nothing else
-        final CharSequence typing = printingStringType >= 0 && typingLayout != null ? typingLayout.getText() : null;
+        CharSequence typing = printingStringType >= 0 && typingLayout != null ? typingLayout.getText() : null;
+        // the layout the row draws is built again only when the row is told to build one, and what
+        // is being done in a chat can change without the row being told: the words the row is
+        // drawing are then the ones it had before. Ask the same place the row asks, so that what
+        // is read is what is going on and not what was going on
+        if (TextUtils.isEmpty(typing) && !isForumCell() && (isDialogCell || isTopic)) {
+            typing = MessagesController.getInstance(currentAccount).getPrintingString(currentDialogId, getTopicId(), true);
+        }
         if (!TextUtils.isEmpty(typing)) {
+            // the dots of "typing..." are a picture of waiting and are not read out, and the mark
+            // a name is put into is not a word either
+            typing = TextUtils.replace(typing, new String[]{"...", "**oo**"}, new String[]{"", ""});
             sb.append(typing);
             sb.append(". ");
             return sb;
