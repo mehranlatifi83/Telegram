@@ -3765,8 +3765,6 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private GradientDrawable archiveFadeGradientDrawable;
     private int archiveFadeGradientDrawableColor;
 
-    @SuppressLint("DrawAllocation")
-    @Override
     // only the chat a screen reader is sitting on is spoken to: anything else would talk over
     // whatever is being read further down the list
     private boolean isReadOutByAccessibility() {
@@ -3803,6 +3801,8 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         accessibilityStateUnread = unread;
     }
 
+    @SuppressLint("DrawAllocation")
+    @Override
     protected void onDraw(Canvas canvas) {
         if (currentDialogId == 0 && customDialog == null) {
             return;
