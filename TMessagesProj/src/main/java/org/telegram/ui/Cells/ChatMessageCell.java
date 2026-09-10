@@ -28789,7 +28789,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 if (itemInfo != null) {
                     info.setCollectionItemInfo(AccessibilityNodeInfo.CollectionItemInfo.obtain(itemInfo.getRowIndex(), 1, 0, 1, false));
                 }
-                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_msg_options, getString("AccActionMessageOptions", R.string.AccActionMessageOptions)));
+                // where a press is what opens the menu of the message, the press is what offers
+                // it, and asking for it by name as well would put the same thing in the list
+                // twice. While messages are being chosen a press takes the message instead, and
+                // the menu is offered beside it, so there is still one of it there
+                if (!pressOpensMessageOptions()) {
+                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_msg_options, getString("AccActionMessageOptions", R.string.AccActionMessageOptions)));
+                }
                 if (hasSenderAvatarMenu()) {
                     info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_sender_avatar_menu, getString(R.string.AccActionSenderOptions)));
                 }
