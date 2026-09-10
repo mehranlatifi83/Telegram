@@ -6573,7 +6573,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (hasMediaToOpen()) {
             return getString(R.string.Open);
         }
-        return pressOpensMessageOptions() ? getString(R.string.AccActionMessageOptions) : null;
+        return null;
     }
 
     private boolean hasMediaToOpen() {
@@ -27700,7 +27700,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     // a message that holds nothing to open answers a press with nothing at all: a text message,
     // and a poll or a checklist, whose answers are pressed on their own and whose card is not.
     // What a press on the screen does to such a message is hold it, and what holding it opens is
-    // the menu of the message, so that is what a press asks for here, and it says so.
+    // the menu of the message, so that is what a press asks for here. The menu keeps the one
+    // place it is offered by name, which is where a reader looks for it.
     private boolean pressOpensMessageOptions() {
         if (currentMessageObject == null || drawVideoImageButton) {
             return false;
@@ -28789,13 +28790,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 if (itemInfo != null) {
                     info.setCollectionItemInfo(AccessibilityNodeInfo.CollectionItemInfo.obtain(itemInfo.getRowIndex(), 1, 0, 1, false));
                 }
-                // where a press is what opens the menu of the message, the press is what offers
-                // it, and asking for it by name as well would put the same thing in the list
-                // twice. While messages are being chosen a press takes the message instead, and
-                // the menu is offered beside it, so there is still one of it there
-                if (!pressOpensMessageOptions()) {
-                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_msg_options, getString("AccActionMessageOptions", R.string.AccActionMessageOptions)));
-                }
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_msg_options, getString("AccActionMessageOptions", R.string.AccActionMessageOptions)));
                 if (hasSenderAvatarMenu()) {
                     info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_sender_avatar_menu, getString(R.string.AccActionSenderOptions)));
                 }
