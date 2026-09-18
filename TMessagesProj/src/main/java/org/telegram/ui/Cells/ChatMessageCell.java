@@ -27748,6 +27748,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 }
             }
             return true;
+        } else if (action == R.id.acc_action_via_bot) {
+            // what a press on the bot's name does
+            if (delegate != null && currentMessageObject != null && !TextUtils.isEmpty(accessibilityViaBotText)) {
+                if (currentViaBotUser != null && currentViaBotUser.bot_inline_placeholder == null) {
+                    delegate.didPressViaBotNotInline(this, currentViaBotUser.id);
+                } else {
+                    String username = UserObject.getPublicUsername(currentViaBotUser);
+                    delegate.didPressViaBot(this, username != null ? username : currentMessageObject.messageOwner.via_bot_name);
+                }
+            }
+            return true;
         } else if (action == R.id.acc_action_small_button) {
             didPressMiniButton(true);
         } else if (action == R.id.acc_action_sender_avatar_menu) {
