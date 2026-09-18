@@ -7347,10 +7347,7 @@ public class EmojiView extends FrameLayout implements
             document = AnimatedEmojiDrawable.findDocument(currentAccount, customEmojiId);
         }
         if (document != null) {
-            final String emoticon = MessageObject.findAnimatedEmojiEmoticon(document, null);
-            if (!TextUtils.isEmpty(emoticon)) {
-                return emoticon;
-            }
+            return MessageObject.describeCustomEmoji(document);
         }
         return null;
     }
