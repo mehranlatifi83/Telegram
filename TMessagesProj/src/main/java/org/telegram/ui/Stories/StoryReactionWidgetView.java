@@ -39,9 +39,9 @@ public class StoryReactionWidgetView extends StoryMediaAreasView.AreaView {
         visibleReaction = ReactionsLayoutInBubble.VisibleReaction.fromTL(mediaArea.reaction);
         // a custom emoji carries no text of its own, and stands for the plain emoji its document
         // gives beside it
-        String emoticon = visibleReaction.emojicon;
+        CharSequence emoticon = visibleReaction.emojicon;
         if (emoticon == null && visibleReaction.documentId != 0) {
-            emoticon = MessageObject.findAnimatedEmojiEmoticon(AnimatedEmojiDrawable.findDocument(UserConfig.selectedAccount, visibleReaction.documentId), null);
+            emoticon = MessageObject.describeCustomEmoji(UserConfig.selectedAccount, visibleReaction.documentId);
         }
         setContentDescription(emoticon == null ? LocaleController.getString(R.string.Reactions) : emoticon + ", " + LocaleController.getString(R.string.Reactions));
         if (mediaArea.flipped) {
