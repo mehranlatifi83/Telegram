@@ -600,24 +600,9 @@ public class ReactionsLayoutInBubble {
         return accessibilityActionIds[index];
     }
 
-    // a custom reaction is drawn and never written: the plain emoji it was made after is the only
-    // thing there is to say of it, and where even that is missing it is called what the app calls
-    // it. A paid one is not an emoji at all and goes by its own name.
-    private CharSequence getReactionText(TLRPC.Reaction reaction) {
-        if (reaction instanceof TLRPC.TL_reactionEmoji) {
-            return ((TLRPC.TL_reactionEmoji) reaction).emoticon;
-        } else if (reaction instanceof TLRPC.TL_reactionCustomEmoji) {
-            final long documentId = ((TLRPC.TL_reactionCustomEmoji) reaction).document_id;
-            return MessageObject.findAnimatedEmojiEmoticon(AnimatedEmojiDrawable.findDocument(currentAccount, documentId), LocaleController.getString(R.string.AccDescrCustomEmoji));
-        } else if (reaction instanceof TLRPC.TL_reactionPaid) {
-            return LocaleController.getString(R.string.StarsReactionTitle);
-        }
-        return "";
-    }
-
     private CharSequence getAccessibilityActionLabel(ReactionButton button) {
         final TLRPC.ReactionCount reactionCount = button.getReactionCount();
-        final CharSequence text = getReactionText(reactionCount.reaction);
+        final CharSequence text = MessageObject.describeReaction(currentAccount, reactionCount.reaction);
         // stars given to a message stay given, so a paid reaction is only ever offered to be sent,
         // however many have been sent already
         final boolean given = reactionCount.chosen && !(reactionCount.reaction instanceof TLRPC.TL_reactionPaid);
