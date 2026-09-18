@@ -1876,7 +1876,7 @@ public class EmojiBottomSheet extends BottomSheet implements NotificationCenter.
                 if (doc == null && documentId != 0) {
                     doc = AnimatedEmojiDrawable.findDocument(currentAccount, documentId);
                 }
-                CharSequence description = doc == null ? null : MessageObject.findAnimatedEmojiEmoticon(doc, null);
+                CharSequence description = doc == null ? null : emoji ? MessageObject.describeCustomEmoji(doc) : MessageObject.findAnimatedEmojiEmoticon(doc, null);
                 if (TextUtils.isEmpty(description)) {
                     description = LocaleController.getString(emoji ? R.string.Emoji : R.string.AttachSticker);
                 }

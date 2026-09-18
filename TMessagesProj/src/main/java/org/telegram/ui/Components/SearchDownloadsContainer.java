@@ -675,6 +675,12 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
             // be pressed: a screen reader walking up from it never got out, and swiping passed it
             // by. The cell is left out, and what it shows is said by the row
             sharedDocumentCell.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            // where the file stands is the state of the row; a file listed as being downloaded that
+            // is not coming is stopped
+            sharedDocumentCell.setAccessibilityStateHost(this, () -> {
+                final int position = recyclerListView.getChildAdapterPosition(this);
+                return position >= downloadingFilesStartRow && position < downloadingFilesEndRow;
+            });
             addView(sharedDocumentCell);
         }
 
@@ -687,13 +693,9 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
             }
             final int position = recyclerListView.getChildAdapterPosition(this);
             final boolean downloading = position >= downloadingFilesStartRow && position < downloadingFilesEndRow;
-            final StringBuilder sb = new StringBuilder(sharedDocumentCell.getAccessibilityText());
+            info.setText(sharedDocumentCell.getAccessibilityText());
             // how far along a file is, or that it is stopped, is drawn as a bar and an icon
-            final CharSequence state = getDownloadState(message, downloading);
-            if (!TextUtils.isEmpty(state)) {
-                sb.append(", ").append(state);
-            }
-            info.setText(sb);
+            sharedDocumentCell.appendAccessibilityState(info);
             if (uiCallback != null && uiCallback.actionModeShowing()) {
                 // while files are being picked a press ticks the row
                 info.setCheckable(true);
@@ -737,20 +739,6 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
         }
     }
 
-    // a file that is coming says how much of it has come; one listed as being downloaded that is
-    // not coming at the moment is stopped. One that is here needs nothing said about it
-    private CharSequence getDownloadState(MessageObject message, boolean downloading) {
-        final String fileName = message.getFileName();
-        if (FileLoader.getInstance(currentAccount).isLoadingFile(fileName)) {
-            final Float progress = ImageLoader.getInstance().getFileProgress(fileName);
-            final int percent = progress == null ? 0 : Math.round(progress * 100);
-            return LocaleController.getString(R.string.Downloading) + " " + percent + "%";
-        }
-        if (downloading) {
-            return LocaleController.getString(R.string.AccDescrDownloadPaused);
-        }
-        return null;
-    }
 
     public void setUiCallback(FilteredSearchView.UiCallback callback) {
         this.uiCallback = callback;

@@ -392,21 +392,9 @@ public class SharedDocumentCell extends FrameLayout implements DownloadControlle
         return checkBox != null && checkBox.isChecked();
     }
 
-    // what the cell shows, as words: the name of the file, then its size and where it came from.
-    // The dot drawn between those two is a picture and is left out
+    // what the cell shows, as words, for the row of the downloads that holds it
     public CharSequence getAccessibilityText() {
-        final StringBuilder sb = new StringBuilder();
-        if (!TextUtils.isEmpty(nameTextView.getText())) {
-            sb.append(nameTextView.getText());
-        }
-        final CharSequence date = dateTextView.getText();
-        if (!TextUtils.isEmpty(date)) {
-            if (sb.length() > 0) {
-                sb.append(", ");
-            }
-            sb.append(TextUtils.replace(date, new String[]{" . "}, new String[]{", "}));
-        }
-        return sb;
+        return getAccessibilityStableText();
     }
 
     public void setDocument(MessageObject messageObject, boolean divider) {
