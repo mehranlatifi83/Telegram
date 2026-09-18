@@ -239,13 +239,7 @@ public class ReactedUserHolderView extends FrameLayout {
                 }
                 hasReactImage = true;
             }
-            String reactionText;
-            if (visibleReaction.emojicon != null) {
-                reactionText = visibleReaction.emojicon;
-            } else {
-                reactionText = MessageObject.findAnimatedEmojiEmoticon(AnimatedEmojiDrawable.findDocument(currentAccount, visibleReaction.documentId), LocaleController.getString(R.string.AccDescrCustomEmoji));
-            }
-            contentDescription = LocaleController.formatString("AccDescrReactedWith", R.string.AccDescrReactedWith, titleView.getText(), reactionText);
+            contentDescription = LocaleController.formatString("AccDescrReactedWith", R.string.AccDescrReactedWith, titleView.getText(), MessageObject.describeReaction(currentAccount, reaction));
         } else {
             if (reactView != null) {
                 reactView.setAnimatedEmojiDrawable(null);
