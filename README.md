@@ -103,7 +103,6 @@ The version name follows Telegram's own; the version code is Telegram's multipli
 ## Contributors
 
 - **[@mehranlatifi83](https://github.com/mehranlatifi83)** (Mehran Latifi) — a blind developer; author of the pull requests listed above, testing every change with the screen readers it is written for.
-- **[@amirmahdifard](https://github.com/amirmahdifard)** (Amir Mahdi Fard) — a blind developer, contributing to the accessibility work in this repository.
 
 Contributions are welcome. Open a pull request against the `accessibility` branch.
 
