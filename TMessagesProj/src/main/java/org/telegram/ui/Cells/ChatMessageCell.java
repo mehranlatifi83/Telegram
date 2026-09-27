@@ -218,6 +218,7 @@ import org.telegram.ui.Components.URLSpanBotCommand;
 import org.telegram.ui.Components.URLSpanBrowser;
 import org.telegram.ui.Components.URLSpanMono;
 import org.telegram.ui.Components.URLSpanNoUnderline;
+import org.telegram.ui.Components.URLSpanUserMention;
 import org.telegram.ui.Components.VectorAvatarThumbDrawable;
 import org.telegram.ui.Components.VideoForwardDrawable;
 import org.telegram.ui.Components.AvatarsListDrawable;
@@ -26584,6 +26585,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (delegate != null && delegate.onAccessibilityAction(action, arguments)) {
             return false;
         }
+        final int linkOptions = linkOptionsActionIndex(action);
+        if (linkOptions >= 0) {
+            collectLinksWithOptions();
+            if (delegate != null && linkOptions < linksWithOptions.size()) {
+                // the very path a link held down takes
+                delegate.didPressUrl(this, linksWithOptions.get(linkOptions), true);
+            }
+            return true;
+        }
         if (action == AccessibilityNodeInfo.ACTION_CLICK) {
             int icon = getIconForCurrentState();
             if (icon != MediaActionDrawable.ICON_NONE && icon != MediaActionDrawable.ICON_FILE) {
@@ -27010,6 +27020,105 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     public SeekBarWaveform getSeekBarWaveform() {
         return seekBarWaveform;
+    }
+
+    /**
+     * A link held down opens a menu of what can be done with it: opening it, copying it, and for
+     * a username or a hashtag, what belongs to those. A screen reader reaches the links of a
+     * message through its own list of them, which can only open a link, never hold it down, so
+     * the menu could not be had at all. Each link that has one is given an action of its own on
+     * the message, named by the link, that opens the very same menu.
+     */
+    private static final int MAX_LINK_OPTIONS_ACTIONS = 16;
+
+    // an action carries an id of its own, and how many of them a message needs is not known
+    // beforehand, so they are handed out as they are first needed and kept for the whole app
+    private static int[] linkOptionsActionIds = new int[0];
+
+    private final ArrayList<URLSpan> linksWithOptions = new ArrayList<>();
+
+    private static int linkOptionsActionId(int index) {
+        if (index >= linkOptionsActionIds.length) {
+            final int from = linkOptionsActionIds.length;
+            linkOptionsActionIds = Arrays.copyOf(linkOptionsActionIds, index + 1);
+            for (int i = from; i <= index; ++i) {
+                // an id handed out for a view can be any small number, and the actions every node
+                // already has are small numbers too: one that came out as the id of a press would
+                // take every press for itself, so those are passed over
+                int actionId;
+                do {
+                    actionId = View.generateViewId();
+                } while ((actionId & (actionId - 1)) == 0);
+                linkOptionsActionIds[i] = actionId;
+            }
+        }
+        return linkOptionsActionIds[index];
+    }
+
+    private static int linkOptionsActionIndex(int action) {
+        for (int i = 0; i < linkOptionsActionIds.length; i++) {
+            if (linkOptionsActionIds[i] == action) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void collectLinksWithOptions() {
+        linksWithOptions.clear();
+        if (currentMessageObject == null) {
+            return;
+        }
+        addLinksWithOptions(currentMessageObject.messageText);
+        addLinksWithOptions(currentMessageObject.caption);
+    }
+
+    private void addLinksWithOptions(CharSequence text) {
+        if (!(text instanceof Spanned)) {
+            return;
+        }
+        final Spanned spanned = (Spanned) text;
+        final URLSpan[] spans = spanned.getSpans(0, spanned.length(), URLSpan.class);
+        if (spans == null || spans.length == 0) {
+            return;
+        }
+        // in the order they are written in, which is not the order they come back in
+        Arrays.sort(spans, (a, b) -> spanned.getSpanStart(a) - spanned.getSpanStart(b));
+        for (URLSpan span : spans) {
+            if (linksWithOptions.size() >= MAX_LINK_OPTIONS_ACTIONS) {
+                return;
+            }
+            // a person named in the text opens their profile when held, and a bot command is
+            // put into the field to be finished: neither has a menu
+            final String url = span.getURL();
+            if (span instanceof URLSpanUserMention || url == null || url.startsWith("/")) {
+                continue;
+            }
+            final int start = spanned.getSpanStart(span);
+            final int end = spanned.getSpanEnd(span);
+            if (start < 0 || end <= start) {
+                continue;
+            }
+            linksWithOptions.add(span);
+        }
+    }
+
+    private CharSequence linkOptionsLabel(URLSpan span) {
+        CharSequence text = null;
+        for (CharSequence source : new CharSequence[] { currentMessageObject.messageText, currentMessageObject.caption }) {
+            if (source instanceof Spanned && ((Spanned) source).getSpanStart(span) >= 0) {
+                text = source.subSequence(((Spanned) source).getSpanStart(span), ((Spanned) source).getSpanEnd(span));
+                break;
+            }
+        }
+        if (TextUtils.isEmpty(text)) {
+            text = span.getURL();
+        }
+        CharSequence label = AndroidUtilities.replaceNewLines(text);
+        if (label.length() > 64) {
+            label = label.subSequence(0, 64) + "…";
+        }
+        return formatString(R.string.AccActionLinkOptions, label);
     }
 
     private class MessageAccessibilityNodeProvider extends AccessibilityNodeProvider {
@@ -27478,6 +27587,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 }
                 if (drawSelectionBackground || getBackground() != null) {
                     info.setSelected(true);
+                }
+                // every link that has a menu when held gets an action that opens it, after
+                // everything else the message offers
+                collectLinksWithOptions();
+                for (int l = 0; l < linksWithOptions.size(); l++) {
+                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(linkOptionsActionId(l), linkOptionsLabel(linksWithOptions.get(l))));
                 }
                 return info;
             } else {
