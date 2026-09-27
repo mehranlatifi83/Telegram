@@ -5798,6 +5798,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
 
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
@@ -6230,6 +6231,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         mediaSpoilerRevealProgress = 0f;
         TLRPC.Message newReply = messageObject.hasValidReplyMessageObject() ? messageObject.replyMessageObject.messageOwner : null;
         boolean messageIdChanged = currentMessageObject == null || currentMessageObject.getId() != messageObject.getId();
+        if (messageIdChanged) {
+            accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
+        }
         boolean messageChanged = currentMessageObject != messageObject || messageObject.forceUpdate || (isRoundVideo && isPlayingRound != (MediaController.getInstance().isPlayingMessage(currentMessageObject) && delegate != null && !delegate.keyboardIsOpened()));
         boolean dataChanged = currentMessageObject != null && currentMessageObject.getId() == messageObject.getId() && lastSendState == MessageObject.MESSAGE_SEND_STATE_EDITING && messageObject.isSent() ||
                 currentMessageObject == messageObject && (isUserDataChanged() || photoNotSet) ||
@@ -23096,6 +23100,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
+        if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
+            accessibilityFocusedStop = AccessibilityNodeProvider.HOST_VIEW_ID;
+        } else if (action == AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS && accessibilityFocusedStop == AccessibilityNodeProvider.HOST_VIEW_ID) {
+            accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
+        }
         if (delegate != null && delegate.onAccessibilityAction(action, arguments)) {
             return false;
         }
@@ -23214,6 +23223,63 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     final ArrayList<Integer> reportedVirtualViewIds = new ArrayList<>();
 
     static final int NO_PREVIOUS_VIRTUAL_VIEW = Integer.MIN_VALUE;
+
+    // which stop of this message a screen reader is on: the message itself, one of its buttons, or
+    // none of them
+    static final int NO_ACCESSIBILITY_STOP = Integer.MIN_VALUE + 1;
+    int accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
+    final Rect accessibilityStopRect = new Rect();
+
+    public boolean hasAccessibilityFocusedStop() {
+        return accessibilityFocusedStop != NO_ACCESSIBILITY_STOP;
+    }
+
+    /**
+     * Where the stop a screen reader goes to next from this message is, from the top of the
+     * message: {@code forward} for the one after the stop it is on, else the one before it. The top
+     * of it is given going forward and the bottom going back, which is the edge a list has to
+     * bring into sight. {@link #NO_ACCESSIBILITY_STOP} when the next stop is not in this message.
+     */
+    public int getAccessibilityStopEdge(boolean forward) {
+        if (accessibilityFocusedStop == NO_ACCESSIBILITY_STOP) {
+            return NO_ACCESSIBILITY_STOP;
+        }
+        final AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
+        // the stops are put in order as the message is reported, so it is reported first
+        provider.createAccessibilityNodeInfo(AccessibilityNodeProvider.HOST_VIEW_ID);
+        final int at = accessibilityFocusedStop == AccessibilityNodeProvider.HOST_VIEW_ID ? -1 : reportedVirtualViewIds.indexOf(accessibilityFocusedStop);
+        if (accessibilityFocusedStop != AccessibilityNodeProvider.HOST_VIEW_ID && at < 0) {
+            return NO_ACCESSIBILITY_STOP;
+        }
+        final ArrayList<Integer> ids = new ArrayList<>(reportedVirtualViewIds);
+        for (int i = forward ? at + 1 : at - 1; i >= 0 && i < ids.size(); i += forward ? 1 : -1) {
+            // a stop with no place on the screen is left out, as it is when it is reported
+            final AccessibilityNodeInfo info = provider.createAccessibilityNodeInfo(ids.get(i));
+            if (info == null) {
+                continue;
+            }
+            info.getBoundsInParent(accessibilityStopRect);
+            return forward ? accessibilityStopRect.top : accessibilityStopRect.bottom;
+        }
+        // going back from the first button is going back to the message, which is on the screen
+        return NO_ACCESSIBILITY_STOP;
+    }
+
+    public static boolean isAccessibilityStopEdge(int edge) {
+        return edge != NO_ACCESSIBILITY_STOP;
+    }
+
+    final Rect accessibilityVisibleRect = new Rect();
+
+    // a button is only said to be on the screen when it is: one below the edge that claimed to
+    // be in sight was landed on where nothing could be seen, and was never brought into view
+    boolean isAccessibilityStopOnScreen(Rect boundsInScreen, int[] pos) {
+        if (!getLocalVisibleRect(accessibilityVisibleRect)) {
+            return false;
+        }
+        accessibilityVisibleRect.offset(pos[0], pos[1]);
+        return Rect.intersects(accessibilityVisibleRect, boundsInScreen);
+    }
 
     int previousVirtualViewId(int virtualViewId) {
         final int at = reportedVirtualViewIds.indexOf(virtualViewId);
