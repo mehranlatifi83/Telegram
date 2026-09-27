@@ -1969,6 +1969,25 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         }
     }
 
+    // a press on a row asked for without a finger, with the point it is taken to be at, for the
+    // lists that go by where a row is pressed
+    public void clickItem(View item, int position, float x, float y) {
+        if (onItemClickListener != null) {
+            onItemClickListener.onItemClick(item, position);
+        } else if (onItemClickListenerExtended != null) {
+            onItemClickListenerExtended.onItemClick(item, position, x, y);
+        }
+    }
+
+    public boolean longClickItem(View item, int position, float x, float y) {
+        if (onItemLongClickListener != null) {
+            return onItemLongClickListener.onItemClick(item, position);
+        } else if (onItemLongClickListenerExtended != null) {
+            return onItemLongClickListenerExtended.onItemClick(item, position, x, y);
+        }
+        return false;
+    }
+
     public boolean longClickItem(View item, int position) {
         if (onItemLongClickListener != null) {
             return onItemLongClickListener.onItemClick(item, position);
