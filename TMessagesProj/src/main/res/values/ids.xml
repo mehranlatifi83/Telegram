@@ -25,11 +25,25 @@
     <item name="sheet_attached_to_fragment_tag" type="id"/>
     <item name="current_animation" type="id"/>
     <item name="acc_action_small_button" type="id"/>
+    <item name="acc_action_download" type="id"/>
     <item name="acc_action_msg_options" type="id"/>
+    <item name="acc_action_sender_avatar_menu" type="id"/>
+    <item name="acc_action_media" type="id"/>
     <item name="acc_action_open_photo" type="id"/>
+    <item name="acc_action_reorder_up" type="id"/>
+    <item name="acc_action_reorder_down" type="id"/>
     <item name="acc_action_chat_preview" type="id"/>
+    <item name="acc_action_open_avatar" type="id"/>
+    <item name="acc_action_slide_next" type="id"/>
+    <item name="acc_action_slide_previous" type="id"/>
+    <item name="acc_action_chat_swipe" type="id"/>
     <item name="acc_action_open_forwarded_origin" type="id"/>
     <item name="acc_action_open_link_preview" type="id"/>
+    <item name="acc_action_open_poll_media" type="id"/>
+    <item name="acc_action_open_poll_explanation_media" type="id"/>
+    <item name="acc_action_move_up" type="id"/>
+    <item name="acc_action_move_down" type="id"/>
+    <item name="acc_action_remove_option" type="id"/>
     <item name="acc_action_copy_code" type="id"/>
     <item name="acc_action_summarize" type="id"/>
     <item name="acc_action_story_previous" type="id"/>
@@ -37,6 +51,7 @@
     <item name="acc_action_story_next" type="id"/>
     <item name="acc_action_story_open_reply" type="id"/>
     <item name="acc_action_story_music" type="id"/>
+    <item name="acc_action_sender_profile" type="id"/>
     <item name="shake_animation" type="id"/>
 
     <item name="timeout_callback" type="id"/>
@@ -71,4 +86,69 @@
 
     <item name="tag_view_on_post_draw_state" type="id" />
     <item name="tag_view_on_post_draw_root_state" type="id" />
+    <item name="acc_action_story_post" type="id" />
+    <item name="acc_action_photo_next" type="id" />
+    <item name="acc_action_photo_previous" type="id" />
+    <item name="acc_action_block_up" type="id" />
+    <item name="acc_action_block_down" type="id" />
+    <item name="acc_action_block_delete" type="id" />
+    <item name="acc_action_table_row" type="id" />
+    <item name="acc_action_table_column" type="id" />
+    <item name="acc_action_table_cell" type="id" />
+    <item name="acc_action_copy_text_0" type="id" />
+    <item name="acc_action_copy_text_1" type="id" />
+    <item name="acc_action_copy_text_2" type="id" />
+    <item name="acc_action_copy_text_3" type="id" />
+    <item name="acc_action_copy_text_4" type="id" />
+    <item name="acc_action_copy_text_5" type="id" />
+    <item name="acc_action_copy_text_6" type="id" />
+    <item name="acc_action_copy_text_7" type="id" />
+    <item name="acc_action_copy_text_8" type="id" />
+    <item name="acc_action_copy_text_9" type="id" />
+    <item name="acc_action_copy_text_10" type="id" />
+    <item name="acc_action_copy_text_11" type="id" />
+    <item name="acc_action_copy_text_12" type="id" />
+    <item name="acc_action_copy_text_13" type="id" />
+    <item name="acc_action_copy_text_14" type="id" />
+    <item name="acc_action_copy_text_15" type="id" />
+    <item name="acc_action_link_options_0" type="id" />
+    <item name="acc_action_link_options_1" type="id" />
+    <item name="acc_action_link_options_2" type="id" />
+    <item name="acc_action_link_options_3" type="id" />
+    <item name="acc_action_link_options_4" type="id" />
+    <item name="acc_action_link_options_5" type="id" />
+    <item name="acc_action_link_options_6" type="id" />
+    <item name="acc_action_link_options_7" type="id" />
+    <item name="acc_action_link_options_8" type="id" />
+    <item name="acc_action_link_options_9" type="id" />
+    <item name="acc_action_link_options_10" type="id" />
+    <item name="acc_action_link_options_11" type="id" />
+    <item name="acc_action_link_options_12" type="id" />
+    <item name="acc_action_link_options_13" type="id" />
+    <item name="acc_action_link_options_14" type="id" />
+    <item name="acc_action_link_options_15" type="id" />
+    <item name="acc_action_reaction_0" type="id" />
+    <item name="acc_action_reaction_1" type="id" />
+    <item name="acc_action_reaction_2" type="id" />
+    <item name="acc_action_reaction_3" type="id" />
+    <item name="acc_action_reaction_4" type="id" />
+    <item name="acc_action_reaction_5" type="id" />
+    <item name="acc_action_reaction_6" type="id" />
+    <item name="acc_action_reaction_7" type="id" />
+    <item name="acc_action_reaction_8" type="id" />
+    <item name="acc_action_reaction_9" type="id" />
+    <item name="acc_action_reaction_10" type="id" />
+    <item name="acc_action_reaction_11" type="id" />
+    <item name="acc_action_reaction_12" type="id" />
+    <item name="acc_action_reaction_13" type="id" />
+    <item name="acc_action_reaction_14" type="id" />
+    <item name="acc_action_reaction_15" type="id" />
+    <item name="acc_action_reaction_16" type="id" />
+    <item name="acc_action_reaction_17" type="id" />
+    <item name="acc_action_reaction_18" type="id" />
+    <item name="acc_action_reaction_19" type="id" />
+    <item name="acc_action_reaction_20" type="id" />
+    <item name="acc_action_reaction_21" type="id" />
+    <item name="acc_action_reaction_22" type="id" />
+    <item name="acc_action_reaction_23" type="id" />
 </resources>
