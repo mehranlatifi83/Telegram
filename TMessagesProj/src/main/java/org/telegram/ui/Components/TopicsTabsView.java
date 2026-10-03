@@ -29,6 +29,7 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -1217,6 +1218,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         private int lastUnread;
         private boolean lastMuted, lastMention, lastReactions;
         private void setCounter(boolean muted, int unread, boolean mention, boolean reactions, boolean animated) {
+            accessibilityUnread = unread;
+            accessibilityReactions = reactions;
             if (reactions) {
                 counterBackgroundColorKey = Theme.key_dialogReactionMentionBackground;
                 if (reactionString == null) {
@@ -1283,6 +1286,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         }
 
         public void setAll(boolean bot, boolean mono, boolean selected) {
+            accessibilityName = getString(bot ? R.string.BotForumNewTopic : R.string.AllTopicsShort);
+            accessibilityMentions = 0;
             setLayout(mono);
             this.topicId = -1;
             this.staticImage = true;
@@ -1311,6 +1316,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         private boolean isAdd = false;
         private boolean staticImage = false;
         public void setAdd(boolean mono, boolean selected) {
+            accessibilityName = getString(R.string.NewTopic);
+            accessibilityMentions = 0;
             setLayout(mono);
             this.staticImage = true;
             this.isAdd = true;
@@ -1330,6 +1337,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
 
         private LoadingDrawable loadingDrawable;
         public void setLoading() {
+            accessibilityName = getString(R.string.Loading);
+            accessibilityMentions = 0;
             setLayout(false);
             this.topicId = -1;
             this.staticImage = true;
@@ -1366,6 +1375,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         }
 
         public void set(long dialogId, TLRPC.TL_forumTopic topic, boolean selected) {
+            accessibilityName = topic.title;
+            accessibilityMentions = topic.unread_mentions_count;
             setLayout(false);
             final boolean animated = topicId == topic.id;
             this.staticImage = false;
@@ -1420,6 +1431,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         }
 
         public void setMf(TLRPC.TL_forumTopic dialog, boolean selected) {
+            accessibilityName = DialogObject.getName(DialogObject.getPeerDialogId(dialog.from_id));
+            accessibilityMentions = 0;
             setLayout(true);
             this.isAdd = false;
             this.staticImage = false;
@@ -1449,6 +1462,33 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
                 animated
             );
             setPinned(false, animated);
+        }
+
+        // a tab draws its icon into its text by way of a stand-in letter, which a screen reader read out
+        // in place of the icon, and shows which tab is chosen and what is unread in it by colour, a
+        // line and a badge: it is named here by what it is and says the rest
+        private CharSequence accessibilityName;
+        private int accessibilityUnread, accessibilityMentions;
+        private boolean accessibilityReactions;
+
+        @Override
+        public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+            super.onInitializeAccessibilityNodeInfo(info);
+            info.setSelected(selected);
+            final StringBuilder sb = new StringBuilder();
+            if (accessibilityName != null) {
+                sb.append(accessibilityName);
+            }
+            if (accessibilityUnread > 0) {
+                sb.append(", ").append(LocaleController.formatPluralString("NewMessages", accessibilityUnread));
+            }
+            if (accessibilityMentions > 0) {
+                sb.append(", ").append(LocaleController.formatPluralString("AccDescrMentionCount", accessibilityMentions));
+            }
+            if (accessibilityReactions) {
+                sb.append(", ").append(getString(R.string.AccDescrMentionReaction));
+            }
+            info.setContentDescription(sb);
         }
 
         private float selectT;
@@ -1717,6 +1757,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
 
         private boolean staticImage = false;
         public void setAll(boolean bot, boolean mono, boolean selected) {
+            accessibilityName = getString(bot ? R.string.BotForumNewTopic : R.string.AllTopicsShort);
+            accessibilityMentions = 0;
             setLayout(mono);
             this.topicId = 0;
             this.isAdd = false;
@@ -1737,6 +1779,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         }
 
         public void setAdd() {
+            accessibilityName = getString(R.string.NewTopic);
+            accessibilityMentions = 0;
             setLayout(false);
             this.topicId = 0;
             this.isAdd = true;
@@ -1753,6 +1797,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         }
 
         public void setLoading() {
+            accessibilityName = getString(R.string.Loading);
+            accessibilityMentions = 0;
             setLayout(false);
             this.topicId = -1;
             this.staticImage = true;
@@ -1770,6 +1816,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         }
 
         public void set(long dialogId, TLRPC.TL_forumTopic topic, boolean selected) {
+            accessibilityName = topic.title;
+            accessibilityMentions = topic.unread_mentions_count;
             setLayout(false);
             final boolean animated = this.topicId == topic.id;
             this.topicId = topic.id;
@@ -1815,6 +1863,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
 
         private AvatarSpan avatarSpan;
         public void setMf(long chatDialogId, TLRPC.TL_forumTopic dialog, boolean selected) {
+            accessibilityName = DialogObject.getName(DialogObject.getPeerDialogId(dialog.from_id));
+            accessibilityMentions = 0;
             setLayout(true);
             final long dialogId = DialogObject.getPeerDialogId(dialog.from_id);
             final boolean animated = this.topicId == dialogId;
@@ -1844,6 +1894,33 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
                 animated
             );
             setPinned(false, animated);
+        }
+
+        // a tab draws its icon into its text by way of a stand-in letter, which a screen reader read out
+        // in place of the icon, and shows which tab is chosen and what is unread in it by colour, a
+        // line and a badge: it is named here by what it is and says the rest
+        private CharSequence accessibilityName;
+        private int accessibilityUnread, accessibilityMentions;
+        private boolean accessibilityReactions;
+
+        @Override
+        public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+            super.onInitializeAccessibilityNodeInfo(info);
+            info.setSelected(selected);
+            final StringBuilder sb = new StringBuilder();
+            if (accessibilityName != null) {
+                sb.append(accessibilityName);
+            }
+            if (accessibilityUnread > 0) {
+                sb.append(", ").append(LocaleController.formatPluralString("NewMessages", accessibilityUnread));
+            }
+            if (accessibilityMentions > 0) {
+                sb.append(", ").append(LocaleController.formatPluralString("AccDescrMentionCount", accessibilityMentions));
+            }
+            if (accessibilityReactions) {
+                sb.append(", ").append(getString(R.string.AccDescrMentionReaction));
+            }
+            info.setContentDescription(sb);
         }
 
         private float selectT;
@@ -1879,6 +1956,8 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         private int lastUnread;
         private boolean lastMuted, lastMention, lastReactions;
         private void setCounter(boolean muted, int unread, boolean mention, boolean reactions, boolean animated) {
+            accessibilityUnread = unread;
+            accessibilityReactions = reactions;
             if (reactions) {
                 counterBackgroundColorKey = Theme.key_dialogReactionMentionBackground;
                 if (reactionString == null) {
