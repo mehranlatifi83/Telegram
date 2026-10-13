@@ -348,6 +348,7 @@ public class TransactionCell extends FrameLayout implements Theme.Colorable {
             nftImageView.clearImage();
         }
 
+        amountView.setContentDescription(null);
         if (transaction.amount == 0 && transaction.key_change) {
             amountView.setVisibility(View.GONE);
         } else if (transaction.nft != null) {
@@ -364,6 +365,8 @@ public class TransactionCell extends FrameLayout implements Theme.Colorable {
             amountView.setVisibility(View.VISIBLE);
             amountView.setCompoundDrawablesRelative(null, null, gramDrawable, null);
             amountView.setText(formatAmount(incoming, transaction.amount));
+            final long gramsAbs = Math.abs(transaction.amount);
+            amountView.setContentDescription(GramWallet.formatGramsWithUnit((gramsAbs == 0 ? "" : incoming ? "+" : "-") + GramWallet.formatGrams(gramsAbs)));
         }
 
         transactionAmount.setVisibility(amountView.getVisibility());
