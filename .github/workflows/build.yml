@@ -39,7 +39,7 @@ concurrency:
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       variants: ${{ steps.plan.outputs.variants }}
     steps:
@@ -53,7 +53,7 @@ jobs:
 
   build:
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
       fail-fast: false
@@ -62,6 +62,16 @@ jobs:
     env:
       NDK_VERSION: 27.2.12479018
       CMAKE_VERSION: 3.22.1
+      # the native code is compiled through ccache, which reuses an object only when the source,
+      # every header it reads, the flags and the compiler are exactly the same as before; anything
+      # that changed is compiled again
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CCACHE_DIR: /home/runner/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: 'true'
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 6G
     steps:
       - name: Make room on the disk
         run: |
@@ -118,21 +128,35 @@ jobs:
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: ccache
+        run: sudo apt-get install -y -qq ccache > /dev/null && ccache --zero-stats > /dev/null
+
+      - name: Compiled native code from earlier builds
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.ccache
+          key: ccache-${{ matrix.variant }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ matrix.variant }}-
+            ccache-
+
       - name: Build ${{ matrix.variant }}
         run: |
           if [ "${{ matrix.variant }}" = "HA_public" ]; then
             ./gradlew :TMessagesProj_AppHockeyApp:assembleAfatHA_public --stacktrace
             src=$(find TMessagesProj_AppHockeyApp/build/outputs/apk -name '*.apk' | head -n 1)
-            out="Telegram-Beta-$VERSION_NAME-$VERSION_CODE.apk"
+            out="Telegram-Beta-CodeLighthouse-v$VERSION_NAME-$VERSION_CODE.apk"
           else
             ./gradlew :TMessagesProj_AppStandalone:assembleAfatStandalone --stacktrace
             src=$(find TMessagesProj_AppStandalone/build/outputs/apk -name '*.apk' | head -n 1)
-            out="Telegram-$VERSION_NAME-$VERSION_CODE.apk"
+            out="Telegram-CodeLighthouse-v$VERSION_NAME-$VERSION_CODE.apk"
           fi
           test -n "$src"
           mkdir -p dist
           cp "$src" "dist/$out"
           echo "APK=dist/$out" >> "$GITHUB_ENV"
+          echo "APK_NAME=${out%.apk}" >> "$GITHUB_ENV"
+          ccache --show-stats | head -n 12
 
       - name: Signature
         run: |
@@ -145,7 +169,7 @@ jobs:
       - name: Keep the apk
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.variant }}-${{ env.VERSION_NAME }}-${{ env.VERSION_CODE }}
+          name: ${{ env.APK_NAME }}
           path: ${{ env.APK }}
           retention-days: 30
 
@@ -156,13 +180,13 @@ jobs:
           NOTES: ${{ inputs.notes }}
         run: |
           if [ "${{ matrix.variant }}" = "HA_public" ]; then
-            tag="$VERSION_NAME-$VERSION_CODE-beta"
-            kind="--prerelease"
-            title="Telegram Beta $VERSION_NAME ($VERSION_CODE)"
-          else
             tag="$VERSION_NAME-$VERSION_CODE"
+            kind="--prerelease"
+            title="Telegram Beta $VERSION_NAME (CodeLighthouse)"
+          else
+            tag="v$VERSION_NAME-$VERSION_CODE"
             kind="--latest"
-            title="Telegram $VERSION_NAME ($VERSION_CODE)"
+            title="Telegram $VERSION_NAME (CodeLighthouse)"
           fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             echo "A release named $tag is already there; raise APP_VERSION_CODE for a new one" >&2
