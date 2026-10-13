@@ -25,6 +25,10 @@ on:
         description: Publish it (HA_public as a pre-release, standalone as a release)
         type: boolean
         default: false
+      draft:
+        description: Publish it as a draft first, to be checked and released by hand
+        type: boolean
+        default: true
       notes:
         description: What the update dialog shows (the body of the release)
         type: string
@@ -192,6 +196,11 @@ jobs:
             echo "A release named $tag is already there; raise APP_VERSION_CODE for a new one" >&2
             exit 1
           fi
+          # a draft is seen by nobody, the updater included, until it is released by hand
+          draft=""
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            draft="--draft"
+          fi
           # the updater reads the version code from this line of the body
           printf '%s\n\nversion_code: %s\n' "${NOTES:-Telegram $VERSION_NAME}" "$VERSION_CODE" > notes.md
-          gh release create "$tag" "$APK" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "$title" --notes-file notes.md $kind
+          gh release create "$tag" "$APK" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "$title" --notes-file notes.md $kind $draft
