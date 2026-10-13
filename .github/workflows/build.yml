@@ -1,0 +1,173 @@
+name: Build
+
+# Built only when asked, from the Actions tab: the beta (HA_public) and/or the standalone build of
+# the accessibility branch, signed with the same key and built with the same local settings as on
+# the computer of the maintainer. Those settings are never in the repository: they come from the
+# LOCAL_BUILD_FILES secret. Publishing is a choice made each time: the beta goes out as a
+# pre-release and the standalone build as a release, which is what the in-app updater looks for.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Which build
+        type: choice
+        options:
+          - HA_public
+          - standalone
+          - both
+        default: HA_public
+      ref:
+        description: Branch, tag or commit to build
+        type: string
+        default: accessibility
+      publish:
+        description: Publish it (HA_public as a pre-release, standalone as a release)
+        type: boolean
+        default: false
+      notes:
+        description: What the update dialog shows (the body of the release)
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ inputs.build }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      variants: ${{ steps.plan.outputs.variants }}
+    steps:
+      - id: plan
+        run: |
+          case "${{ inputs.build }}" in
+            HA_public) echo 'variants=["HA_public"]' >> "$GITHUB_OUTPUT" ;;
+            standalone) echo 'variants=["standalone"]' >> "$GITHUB_OUTPUT" ;;
+            *) echo 'variants=["HA_public","standalone"]' >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(needs.plan.outputs.variants) }}
+    env:
+      NDK_VERSION: 27.2.12479018
+      CMAKE_VERSION: 3.22.1
+    steps:
+      - name: Make room on the disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/node_modules /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium
+          sudo docker image prune --all --force > /dev/null 2>&1 || true
+          df -h /
+
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK, NDK and CMake
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION" "build-tools;35.0.0" "build-tools;36.0.0" "platforms;android-36" > /dev/null
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Local build files
+        env:
+          LOCAL_BUILD_FILES: ${{ secrets.LOCAL_BUILD_FILES }}
+        run: |
+          if [ -z "$LOCAL_BUILD_FILES" ]; then
+            echo "The LOCAL_BUILD_FILES secret is missing" >&2
+            exit 1
+          fi
+          printf '%s' "$LOCAL_BUILD_FILES" | base64 -d | tar xz
+          python3 - <<'EOF'
+          import re
+          path = "TMessagesProj/src/main/res/values/strings.xml"
+          names = open("app-name-strings.txt", encoding="utf-8").read().splitlines()
+          s = open(path, encoding="utf-8").read()
+          for line in names:
+              key = re.search(r'name="([^"]+)"', line).group(1)
+              s, n = re.subn(r'[ \t]*<string name="%s">.*?</string>' % key, line.replace("\\", "\\\\"), s, count=1)
+              assert n == 1, key
+          open(path, "w", encoding="utf-8", newline="\n").write(s)
+          EOF
+          rm app-name-strings.txt
+          chmod +x gradlew
+          name=$(grep '^APP_VERSION_NAME=' gradle.properties | cut -d= -f2)
+          code=$(grep '^APP_VERSION_CODE=' gradle.properties | cut -d= -f2)
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$code" >> "$GITHUB_ENV"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build ${{ matrix.variant }}
+        run: |
+          if [ "${{ matrix.variant }}" = "HA_public" ]; then
+            ./gradlew :TMessagesProj_AppHockeyApp:assembleAfatHA_public --stacktrace
+            src=$(find TMessagesProj_AppHockeyApp/build/outputs/apk -name '*.apk' | head -n 1)
+            out="Telegram-Beta-$VERSION_NAME-$VERSION_CODE.apk"
+          else
+            ./gradlew :TMessagesProj_AppStandalone:assembleAfatStandalone --stacktrace
+            src=$(find TMessagesProj_AppStandalone/build/outputs/apk -name '*.apk' | head -n 1)
+            out="Telegram-$VERSION_NAME-$VERSION_CODE.apk"
+          fi
+          test -n "$src"
+          mkdir -p dist
+          cp "$src" "dist/$out"
+          echo "APK=dist/$out" >> "$GITHUB_ENV"
+
+      - name: Signature
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+
+      - name: Leave nothing of the key behind
+        if: always()
+        run: rm -f TMessagesProj/config/release.keystore gradle.properties
+
+      - name: Keep the apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variant }}-${{ env.VERSION_NAME }}-${{ env.VERSION_CODE }}
+          path: ${{ env.APK }}
+          retention-days: 30
+
+      - name: Publish
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          if [ "${{ matrix.variant }}" = "HA_public" ]; then
+            tag="$VERSION_NAME-$VERSION_CODE-beta"
+            kind="--prerelease"
+            title="Telegram Beta $VERSION_NAME ($VERSION_CODE)"
+          else
+            tag="$VERSION_NAME-$VERSION_CODE"
+            kind="--latest"
+            title="Telegram $VERSION_NAME ($VERSION_CODE)"
+          fi
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "A release named $tag is already there; raise APP_VERSION_CODE for a new one" >&2
+            exit 1
+          fi
+          # the updater reads the version code from this line of the body
+          printf '%s\n\nversion_code: %s\n' "${NOTES:-Telegram $VERSION_NAME}" "$VERSION_CODE" > notes.md
+          gh release create "$tag" "$APK" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "$title" --notes-file notes.md $kind
