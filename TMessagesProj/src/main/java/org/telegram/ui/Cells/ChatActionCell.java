@@ -4207,11 +4207,29 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             info.setText(accessibilityText);
         }
         info.setEnabled(true);
+        if (hasWalletActionLayout() && walletActionLayout != null) {
+            // a transfer is drawn with more than its text, and opens on a tap
+            final CharSequence details = walletActionLayout.getAccessibilityDetails();
+            if (!TextUtils.isEmpty(details)) {
+                final CharSequence full = TextUtils.concat(accessibilityText, "\n", details);
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                    info.setContentDescription(full.toString());
+                } else {
+                    info.setText(full);
+                }
+            }
+            info.setClickable(true);
+            info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK);
+        }
         reactionsLayoutInBubble.addAccessibilityActions(info);
     }
 
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
+        if (action == AccessibilityNodeInfo.ACTION_CLICK && hasWalletActionLayout()) {
+            openGramTransaction();
+            return true;
+        }
         if (reactionsLayoutInBubble.performAccessibilityAction(action)) {
             return true;
         }
