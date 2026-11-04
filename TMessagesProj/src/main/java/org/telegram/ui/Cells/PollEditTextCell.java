@@ -22,6 +22,7 @@ import android.graphics.Canvas;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
@@ -91,6 +92,9 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
     private boolean alwaysShowText2;
     private ChatActivityEnterViewAnimatedIconView emojiButton;
     private ReorderDelegate reorderDelegate;
+    private boolean removeAccessibilityAction;
+    private CharSequence fieldLabel;
+    private int charactersLeft = -1;
 
     /**
      * Rows are put in order by holding a press and dragging, which leaves a screen reader with no
@@ -163,10 +167,31 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
         }
     }
 
+    /**
+     * Every field of a poll is drawn with the same hint, so one option reads exactly like the next
+     * and there is no telling which of them is being typed into. The label given here is the place
+     * of the field among the others, and it is put on the field as a hint for the screen reader,
+     * where it does not get in the way of what has been typed.
+     */
+    public void setFieldLabel(CharSequence label) {
+        fieldLabel = label;
+        installFieldAccessibilityDelegate();
+    }
+
+    /**
+     * How many characters are still allowed, or -1 while the count is not being drawn. The count is
+     * drawn beside the field as a bare number, which on its own is a stop that says nothing, so it
+     * is said as part of the field instead.
+     */
+    public void setAccessibilityCharactersLeft(int left) {
+        charactersLeft = left;
+        installFieldAccessibilityDelegate();
+    }
+
     private boolean fieldAccessibilityDelegateInstalled;
 
-    // everything a screen reader is told about the field goes through the one delegate, so that
-    // nothing added to it later wipes out what is already there
+    // everything a screen reader is told about the field goes through the one delegate: what the
+    // field is called, how much room is left in it, and where its row can be moved to
     private void installFieldAccessibilityDelegate() {
         if (fieldAccessibilityDelegateInstalled) {
             return;
@@ -176,19 +201,33 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
             @Override
             public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
                 super.onInitializeAccessibilityNodeInfo(host, info);
-                if (reorderDelegate == null) {
-                    return;
+                final CharSequence label = fieldAccessibilityLabel();
+                if (!TextUtils.isEmpty(label)) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        info.setHintText(label);
+                    } else if (textView.length() == 0) {
+                        info.setContentDescription(label);
+                    }
                 }
-                if (reorderDelegate.canMoveUp(PollEditTextCell.this)) {
-                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_move_up, LocaleController.getString(R.string.AccActionMoveUp)));
+                if (removeAccessibilityAction && deleteImageView != null && deleteImageView.getVisibility() != VISIBLE && isEnabled()) {
+                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_remove_option, LocaleController.getString(R.string.Delete)));
                 }
-                if (reorderDelegate.canMoveDown(PollEditTextCell.this)) {
-                    info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_move_down, LocaleController.getString(R.string.AccActionMoveDown)));
+                if (reorderDelegate != null) {
+                    if (reorderDelegate.canMoveUp(PollEditTextCell.this)) {
+                        info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_move_up, LocaleController.getString(R.string.AccActionMoveUp)));
+                    }
+                    if (reorderDelegate.canMoveDown(PollEditTextCell.this)) {
+                        info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_move_down, LocaleController.getString(R.string.AccActionMoveDown)));
+                    }
                 }
             }
 
             @Override
             public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                if (action == R.id.acc_action_remove_option && removeAccessibilityAction) {
+                    callOnDelete();
+                    return true;
+                }
                 if (reorderDelegate != null) {
                     if (action == R.id.acc_action_move_up && reorderDelegate.canMoveUp(PollEditTextCell.this)) {
                         reorderDelegate.moveUp(PollEditTextCell.this);
@@ -202,6 +241,14 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
                 return super.performAccessibilityAction(host, action, args);
             }
         });
+    }
+
+    private CharSequence fieldAccessibilityLabel() {
+        if (charactersLeft < 0) {
+            return fieldLabel;
+        }
+        final CharSequence left = LocaleController.formatString(R.string.AccDescrPollCharactersLeft, LocaleController.formatPluralString("Characters", charactersLeft));
+        return TextUtils.isEmpty(fieldLabel) ? left : TextUtils.concat(fieldLabel, ", ", left);
     }
 
     public PollEditTextCell(Context context, OnClickListener onDelete) {
@@ -330,6 +377,7 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
             addView(deleteImageView, LayoutHelper.createFrame(48, 50, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP, LocaleController.isRTL ? 3 : 0, 0, LocaleController.isRTL ? 0 : 3, 0));
 
             textView2 = new SimpleTextView(context);
+            textView2.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             textView2.setTextSize(13);
             textView2.setGravity((LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP);
             addView(textView2, LayoutHelper.createFrame(48, 24, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP, LocaleController.isRTL ? 20 : 0, 43, LocaleController.isRTL ? 0 : 20, 0));
@@ -423,6 +471,7 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
     public void createErrorTextView() {
         alwaysShowText2 = true;
         textView2 = new SimpleTextView(getContext());
+        textView2.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         textView2.setTextSize(13);
         textView2.setGravity((LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP);
         addView(textView2, LayoutHelper.createFrame(48, 24, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP, LocaleController.isRTL ? 20 : 0, 17, LocaleController.isRTL ? 0 : 20, 0));
@@ -504,6 +553,21 @@ public class PollEditTextCell extends FrameLayout implements SuggestEmojiView.An
             return;
         }
         deleteImageView.callOnClick();
+    }
+
+    /**
+     * On a poll the button for removing an option is hidden to make room for the one that attaches
+     * something, and the only way left of removing it is to empty the field and then press back
+     * once more on an empty field. There is nothing on the screen that says so. Put the same
+     * removal on the field as an action, but only where the button itself is not there to be
+     * pressed, so it is not offered twice.
+     */
+    public void setupRemoveAccessibilityAction() {
+        if (deleteImageView == null) {
+            return;
+        }
+        removeAccessibilityAction = true;
+        installFieldAccessibilityDelegate();
     }
 
     public void setShowNextButton(boolean value) {
