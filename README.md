@@ -4,7 +4,7 @@ This repository tracks **accessibility work on [Telegram for Android](https://gi
 
 > The branches here exist so that each change stays small enough to review on its own, and so that all of them can be tested together before being offered upstream. A build of the merged work is [published here](#builds) as well, for people who would rather have the changes now than wait for them to land upstream.
 
-Currently based on Telegram for Android **13.0.2**.
+Currently based on Telegram for Android **13.1.1**.
 
 ## Branches
 
@@ -16,7 +16,7 @@ Currently based on Telegram for Android **13.0.2**.
 
 ## Pull requests
 
-All 127 of the following are open against [DrKLO/Telegram](https://github.com/DrKLO/Telegram). Each one says what was wrong, what changed, and how to check it with a screen reader.
+All 131 of the following are open against [DrKLO/Telegram](https://github.com/DrKLO/Telegram). Each one says what was wrong, what changed, and how to check it with a screen reader.
 
 ### Reading messages
 
@@ -43,6 +43,7 @@ All 127 of the following are open against [DrKLO/Telegram](https://github.com/Dr
 | [#2062](https://github.com/DrKLO/Telegram/pull/2062) | Allow copying every monospace text in a message with screen readers |
 | [#2132](https://github.com/DrKLO/Telegram/pull/2132) | Add link menu actions for screen readers |
 | [#2063](https://github.com/DrKLO/Telegram/pull/2063) | Announce bot callback answers to screen readers |
+| [#2190](https://github.com/DrKLO/Telegram/pull/2190) | Read the inline bot a message was sent via |
 
 ### Polls and checklists
 
@@ -100,6 +101,8 @@ All 127 of the following are open against [DrKLO/Telegram](https://github.com/Dr
 | [#2165](https://github.com/DrKLO/Telegram/pull/2165) | Allow trimming round videos before sending with screen readers |
 | [#2124](https://github.com/DrKLO/Telegram/pull/2124) | Make the downloads list accessible to screen readers |
 | [#2133](https://github.com/DrKLO/Telegram/pull/2133) | Announce music download state in all lists |
+| [#2188](https://github.com/DrKLO/Telegram/pull/2188) | Announce download state and progress in file and music lists |
+| [#2187](https://github.com/DrKLO/Telegram/pull/2187) | Add a Send action to music and voice results of inline bots |
 
 ### Rich messages
 
@@ -194,6 +197,7 @@ These are places where a control is painted onto a canvas, or has no words of it
 | [#2153](https://github.com/DrKLO/Telegram/pull/2153) | Announce the time left on live locations in the location screen |
 | [#2129](https://github.com/DrKLO/Telegram/pull/2129) | Allow screen readers in secret chats with the other side's notice |
 | [#2130](https://github.com/DrKLO/Telegram/pull/2130) | Make channel and post statistics accessible to screen readers |
+| [#2189](https://github.com/DrKLO/Telegram/pull/2189) | Label wallet buttons and read what the wallet draws |
 
 ### Beyond accessibility
 
