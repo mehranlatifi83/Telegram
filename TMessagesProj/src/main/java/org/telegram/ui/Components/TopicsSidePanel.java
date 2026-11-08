@@ -1408,8 +1408,24 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
             previewLayout = StaticLayoutEx.createStaticLayout(preview, previewPaint, Math.max(1, previewWidth), Layout.Alignment.ALIGN_NORMAL, 1f, dp(1), false, TextUtils.TruncateAt.END, Math.max(1, previewWidth), 2);
             if (muted && muteDrawable == null) muteDrawable = ContextCompat.getDrawable(getContext(), R.drawable.list_mute).mutate();
             if (pinned && pinDrawable == null) pinDrawable = ContextCompat.getDrawable(getContext(), R.drawable.list_pin).mutate();
+            // the row draws its texts itself, so a screen reader found nothing to read in it: it is read
+            // the way a chat in the list is, by what it shows
+            final StringBuilder description = new StringBuilder();
+            if (title != null) description.append(title.toString().replace('\n', ' ')).append(". ");
+            if (pinned) description.append(LocaleController.getString(R.string.AccDescrStoryPinned)).append(". ");
+            if (muted) description.append(LocaleController.getString(R.string.AccDescrNotificationsMuted)).append(". ");
+            if (unread > 0) description.append(LocaleController.formatPluralString("NewMessages", unread)).append(". ");
+            if (top != null && top.date != 0) description.append(LocaleController.formatDateAudio(top.date, true)).append(". ");
+            if (!TextUtils.isEmpty(preview)) description.append(preview);
+            setContentDescription(description);
             requestLayout();
             invalidate();
+        }
+
+        @Override
+        public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
+            super.onInitializeAccessibilityNodeInfo(info);
+            info.setSelected(selected);
         }
 
         @Override
