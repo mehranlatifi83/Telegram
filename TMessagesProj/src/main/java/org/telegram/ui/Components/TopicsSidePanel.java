@@ -606,10 +606,76 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
         if (opening && tagsView != null) animateTagsPop();
         panel.setTranslationX(getPanelWidth() * (1f - progress));
         setVisibility(progress > 0 || touching ? VISIBLE : GONE);
+        if (progress >= 1f) {
+            onOpenedForAccessibility();
+        } else if (progress <= 0f) {
+            onClosedForAccessibility();
+        }
         invalidate();
         if (delegate != null) {
             delegate.onProgressChanged(progress);
         }
+    }
+
+    /** The chat's views beside the panel, hidden from accessibility while it is open, and what they were before. */
+    private final ArrayList<View> hiddenFromAccessibility = new ArrayList<>();
+    private final ArrayList<Integer> hiddenImportance = new ArrayList<>();
+    private boolean openForAccessibility;
+
+    /**
+     * The panel is drawn over the chat, which went on being read under it: a screen reader's focus
+     * stayed on the button that opened it and swiping went through the chat and the panel mixed. While
+     * it is open the chat is hidden from accessibility, as under a window, and the focus goes to the
+     * topic that is open, or to the first one.
+     */
+    private void onOpenedForAccessibility() {
+        if (openForAccessibility || !AndroidUtilities.isAccessibilityTouchExplorationEnabled()) {
+            return;
+        }
+        openForAccessibility = true;
+        if (getParent() instanceof ViewGroup) {
+            final ViewGroup parent = (ViewGroup) getParent();
+            for (int i = 0; i < parent.getChildCount(); i++) {
+                final View child = parent.getChildAt(i);
+                if (child == this) {
+                    continue;
+                }
+                hiddenFromAccessibility.add(child);
+                hiddenImportance.add(child.getImportantForAccessibility());
+                child.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            }
+        }
+        int position = 0;
+        for (int i = 0; i < adapter.items.size(); i++) {
+            if (adapter.items.get(i).getId() == currentTopicId) {
+                position = i;
+                break;
+            }
+        }
+        final int target = position;
+        if (target < adapter.items.size()) {
+            ((LinearLayoutManager) listView.getLayoutManager()).scrollToPositionWithOffset(target, dp(48));
+        }
+        listView.postDelayed(() -> {
+            if (!openForAccessibility) {
+                return;
+            }
+            final RecyclerView.ViewHolder holder = listView.findViewHolderForAdapterPosition(target);
+            final View view = holder != null ? holder.itemView : searchField;
+            view.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+        }, 150);
+    }
+
+    private void onClosedForAccessibility() {
+        if (!openForAccessibility) {
+            return;
+        }
+        openForAccessibility = false;
+        for (int i = 0; i < hiddenFromAccessibility.size(); i++) {
+            hiddenFromAccessibility.get(i).setImportantForAccessibility(hiddenImportance.get(i));
+        }
+        hiddenFromAccessibility.clear();
+        hiddenImportance.clear();
     }
 
     public void open() {
