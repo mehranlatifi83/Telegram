@@ -5461,6 +5461,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (currentMessageObject == null) {
             return null;
         }
+        // a message that could not be sent opens its menu when pressed, whatever its media
+        if (currentMessageObject.isSendError()) {
+            return getString(R.string.AccActionMessageOptions);
+        }
         switch (getIconForCurrentState()) {
             case MediaActionDrawable.ICON_PLAY:
                 return getString(R.string.AccActionPlay);
