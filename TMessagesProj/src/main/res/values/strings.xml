@@ -11678,4 +11678,6 @@
     <string name="FpnvConsentCountry">Country</string>
     <string name="FpnvConsentMccMnc">MCC / MNC</string>
     <string name="FpnvConsentPhoneNumber">Phone Number</string>
+    <string name="AccDescrWidgetTab">Tab</string>
+    <string name="AccDescrWidgetPartlyChecked">Partly checked</string>
 </resources>

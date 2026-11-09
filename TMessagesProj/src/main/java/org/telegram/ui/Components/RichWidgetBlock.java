@@ -7,6 +7,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.text.TextUtils;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -14,6 +15,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.R;
 import org.telegram.messenger.RichMessageLayout;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.tl.TL_iv;
@@ -23,6 +25,7 @@ import org.telegram.ui.Cells.ChatMessageTransitionParams;
 import org.telegram.ui.Cells.TextSelectionHelper;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import org.telegram.utils.twidget.WidgetAccessibility;
 import org.telegram.utils.twidget.WidgetMedia;
 import org.telegram.utils.twidget.WidgetSandboxMessage;
 import org.telegram.utils.twidget.WidgetSandboxSession;
@@ -373,6 +376,184 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
     private Theme.ResourcesProvider resourcesProvider() {
         ChatMessageCell cell = root.getCell();
         return cell != null ? cell.getResourcesProvider() : null;
+    }
+
+    // ── accessibility ──
+
+    /*
+     * A widget is drawn from the ops its scripts build, so a screen reader found nothing in it. What the
+     * renderer lays out is given to it as the message's own elements: each paragraph of text, each heading
+     * and image with a text alternative, and each thing that takes a press (a button, a link, a check box, a
+     * tab, a slider), with the role, the name and the states the widget gives it through HTML and ARIA. A
+     * double tap presses an element where it is, as a finger does; what a live region says when it changes
+     * is announced.
+     */
+    private WidgetAccessibility accessibility = WidgetAccessibility.EMPTY;
+
+    private WidgetAccessibility accessibility() {
+        WidgetSandboxSession.Frame frame = message == null ? null : message.frame();
+        WidgetAccessibility now = frame == null ? WidgetAccessibility.EMPTY : frame.accessibility;
+        if (now != accessibility) {
+            WidgetAccessibility before = accessibility;
+            accessibility = now;
+            if (before != WidgetAccessibility.EMPTY && AndroidUtilities.isAccessibilityScreenReaderEnabled()) {
+                CharSequence said = now.liveChange(before);
+                if (said != null && said.length() > 0) AndroidUtilities.makeAccessibilityAnnouncement(said);
+            }
+            if (view != null) {
+                view.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            }
+        }
+        return accessibility;
+    }
+
+    private WidgetAccessibility.Node accessibilityNode(int element) {
+        WidgetAccessibility tree = accessibility();
+        return element >= 0 && element < tree.nodes.size() ? tree.nodes.get(element) : null;
+    }
+
+    @Override
+    protected int getBlockAccessibilityElementCount() {
+        if (WidgetMedia.isPreview(embed.url)) return 0;
+        return accessibility().nodes.size();
+    }
+
+    @Override
+    protected CharSequence getBlockAccessibilityElementText(int element) {
+        WidgetAccessibility.Node node = accessibilityNode(element);
+        return node == null ? null : node.name;
+    }
+
+    @Override
+    protected boolean isBlockAccessibilityElementText(int element) {
+        WidgetAccessibility.Node node = accessibilityNode(element);
+        return node != null && (node.isText() || node.isHeading());
+    }
+
+    @Override
+    protected boolean isBlockAccessibilityElementButton(int element) {
+        WidgetAccessibility.Node node = accessibilityNode(element);
+        return node != null && node.actionable;
+    }
+
+    @Override
+    protected CharSequence getBlockAccessibilityElementStateDescription(int element) {
+        WidgetAccessibility.Node node = accessibilityNode(element);
+        return node == null ? null : stateDescription(node);
+    }
+
+    @Override
+    protected void getBlockAccessibilityElementBounds(int element, Rect out) {
+        WidgetAccessibility.Node node = accessibilityNode(element);
+        if (node == null) {
+            super.getBlockAccessibilityElementBounds(element, out);
+            return;
+        }
+        final float d = AndroidUtilities.density;
+        final int left = padding.left - bleedLeft;
+        final int top = (int) currY + padding.top;
+        out.set(
+            left + (int) Math.floor(node.x * d),
+            top + (int) Math.floor(node.y * d),
+            left + (int) Math.ceil((node.x + Math.max(1, node.width)) * d),
+            top + (int) Math.ceil((node.y + Math.max(1, node.height)) * d));
+    }
+
+    @Override
+    protected boolean onBlockAccessibilityElementClick(int element, View host) {
+        WidgetAccessibility.Node node = accessibilityNode(element);
+        if (node == null || !node.actionable || node.disabled || message == null || !running || !message.scriptsRunning()) return false;
+        final float x = node.x + Math.max(1, node.width) / 2f;
+        final float y = node.y + Math.max(1, node.height) / 2f;
+        message.touch(0, x, y, 0, true, false, 0, 0);
+        message.touch(2, x, y, 0, true, false, 0, 0);
+        return true;
+    }
+
+    @Override
+    public void onInitializeAccessibilityElementInfo(int element, android.view.accessibility.AccessibilityNodeInfo info) {
+        WidgetAccessibility.Node node = accessibilityNode(element);
+        if (node == null) return;
+        info.setClassName(accessibilityClassName(node));
+        if (android.os.Build.VERSION.SDK_INT >= 28) info.setHeading(node.isHeading());
+        info.setEnabled(!node.disabled);
+        if (node.isCheckable() || node.pressed != null) {
+            info.setCheckable(true);
+            info.setChecked("true".equals(node.checked) || "true".equals(node.pressed));
+        }
+        if ("true".equals(node.selected) || node.current) info.setSelected(true);
+        if (node.isRange() && !Float.isNaN(node.value)) {
+            final float min = Float.isNaN(node.min) ? 0 : node.min;
+            final float max = Float.isNaN(node.max) ? 100 : node.max;
+            info.setRangeInfo(android.view.accessibility.AccessibilityNodeInfo.RangeInfo.obtain(
+                android.view.accessibility.AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_FLOAT, min, max, node.value));
+        }
+        CharSequence state = stateDescription(node);
+        if (state != null) {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                info.setStateDescription(state);
+            } else {
+                info.setText(TextUtils.concat(node.name, ", ", state));
+            }
+        }
+        boolean pressable = node.actionable && !node.disabled;
+        info.setClickable(pressable);
+        if (!pressable) info.removeAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK);
+        info.removeAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK);
+        info.setLongClickable(false);
+    }
+
+    private static String accessibilityClassName(WidgetAccessibility.Node node) {
+        switch (node.role) {
+            case "button":
+            case "menuitem":
+            case "tab":
+            case "option":
+                return node.pressed != null ? "android.widget.ToggleButton" : "android.widget.Button";
+            case "link":
+                return "android.widget.Button";
+            case "checkbox":
+                return "android.widget.CheckBox";
+            case "radio":
+                return "android.widget.RadioButton";
+            case "switch":
+                return "android.widget.Switch";
+            case "image":
+                return "android.widget.ImageView";
+            case "slider":
+                return "android.widget.SeekBar";
+            case "progressbar":
+                return "android.widget.ProgressBar";
+            default:
+                return "android.widget.TextView";
+        }
+    }
+
+    /** What the node is beyond its name, as a screen reader says it: its role where Android has no class
+     *  for it, then its states and value. */
+    private static CharSequence stateDescription(WidgetAccessibility.Node node) {
+        StringBuilder sb = new StringBuilder();
+        if ("link".equals(node.role)) append(sb, LocaleController.getString(R.string.MessageOptionsLink));
+        if ("tab".equals(node.role)) append(sb, LocaleController.getString(R.string.AccDescrWidgetTab));
+        if ("mixed".equals(node.checked)) append(sb, LocaleController.getString(R.string.AccDescrWidgetPartlyChecked));
+        if ("true".equals(node.expanded)) append(sb, LocaleController.getString(R.string.AccDescrExpanded));
+        else if ("false".equals(node.expanded)) append(sb, LocaleController.getString(R.string.AccDescrCollapsed));
+        if (node.valueText != null && !node.valueText.isEmpty()) {
+            append(sb, node.valueText);
+        } else if (node.isRange() && !Float.isNaN(node.value)) {
+            append(sb, formatValue(node.value));
+        }
+        return sb.length() == 0 ? null : sb;
+    }
+
+    private static void append(StringBuilder sb, CharSequence part) {
+        if (part == null || part.length() == 0) return;
+        if (sb.length() > 0) sb.append(", ");
+        sb.append(part);
+    }
+
+    private static String formatValue(float value) {
+        return value == Math.rint(value) ? Long.toString((long) value) : Float.toString(value);
     }
 
     // ── text selection (docs/sdk-v1.md §5.10) ──

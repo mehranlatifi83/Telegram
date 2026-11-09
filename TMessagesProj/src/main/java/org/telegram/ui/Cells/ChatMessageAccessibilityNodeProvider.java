@@ -580,6 +580,7 @@ class ChatMessageAccessibilityNodeProvider extends AccessibilityNodeProvider {
                 if (clickable) {
                     info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
                 }
+                block.onInitializeAccessibilityElementInfo(localElement[0], info);
             } else if (virtualViewId >= LINK_CAPTION_IDS_START) {
                 if (!(cell.currentMessageObject.caption instanceof Spannable) || cell.captionLayout == null) {
                     return null;

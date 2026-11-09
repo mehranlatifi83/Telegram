@@ -9,7 +9,7 @@ update can start from the repository's state and re-apply only these.
 |---|---|---|
 | `widget-sandbox/` | github.com/TelegramMessenger/widget-sandbox | `bf4b6bd` (2026-11-06: `v0.6.0` + the QuickJS fixes backport, a submodule bump only), unchanged |
 | `widget-sandbox/packages/ios/Sources/CQuickJS/quickjs/` | its submodule, github.com/TelegramMessenger/quickjs | `f4dd164` (branch `fixes-backport`, 2026-11-06: memory-safety fixes from quickjs-ng after 0.17.0 on `c24d6b0`, among them the RegExp bytecode use-after-free of the widget RCE report): top-level `.c`/`.h`, `LICENSE`, `README.md` only (no tests, docs, examples) |
-| `twidget/` | github.com/TelegramMessenger/twidget | `main` at `a22eff2` (2026-11-02: the Telegram layout fixes below, on `42baa3f`'s widget-sandbox v0.6.0 and heavy-box count), unchanged |
+| `twidget/` | github.com/TelegramMessenger/twidget | `main` at `a22eff2` (2026-11-02: the Telegram layout fixes below, on `42baa3f`'s widget-sandbox v0.6.0 and heavy-box count), with `twidget-accessibility.patch` |
 
 What the Android build compiles (`jni/twidget/twidget.cmake`): widget-sandbox's C++ core
 (`packages/desktop/sandbox`, without `icu_intl.cpp`, Windows' ICU: Android answers Intl from Java) and QuickJS, twidget's `Sources/TwidgetCore/src` and its litehtml fork
@@ -33,7 +33,17 @@ draws a widget into a View, which stays in `org.telegram.ui.Components`: `RichWi
    `WidgetSandboxResources` splits on: `shasum` writes two), update the table above and the versions in `WidgetStressRunner`.
    The copies' new sources are compiled by name in `twidget.cmake` for TwidgetCore (widget-sandbox's by a glob).
 
-## twidget: no changes
+## twidget: what a screen reader finds (`twidget-accessibility.patch`)
+
+`Sources/TwidgetCore/src/renderer.{h,cpp}` gain `Renderer::accessibility_json()`: the widget's paragraphs of text,
+headings, images with a text alternative and what takes a press, with their role, name, states, value, live region
+and box in document CSS px, from the elements as laid out and their HTML and ARIA attributes (role, aria-label,
+aria-labelledby, alt, title, aria-checked/pressed/selected/expanded/disabled/current, aria-valuenow/min/max/valuetext,
+aria-live, aria-hidden). The bridge sends it to `WidgetSandboxBackend#accessibilityTree` at every paint where it
+changed, before the frame it belongs to, as it sends the selectable text. Nothing else in twidget changes; apply the
+patch again after an update.
+
+## twidget: no other changes
 
 The layout the conformance set (`auto/28-grid-percent-fill`, `29-grid-svg-marks`, `30-svg-fill-box`) and the bot demos'
 poll, duel and ticker drew wrong, and a canvas sized by its CSS width alone, were `twidget-layout.patch` here from

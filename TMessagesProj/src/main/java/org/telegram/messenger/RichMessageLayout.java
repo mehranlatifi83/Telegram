@@ -9641,6 +9641,14 @@ public class RichMessageLayout {
             return false;
         }
 
+        /**
+         * The last word on an element's node, after the message has filled it in: what it is (its class, a
+         * heading), its states and value, and whether it takes a press, for a block whose elements are more
+         * than text and buttons.
+         */
+        public void onInitializeAccessibilityElementInfo(int element, android.view.accessibility.AccessibilityNodeInfo info) {
+        }
+
         private int getCheckboxAccessibilityElementCount() {
             return checkbox == null ? 0 : 1;
         }
