@@ -24,7 +24,9 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.ItemOptions;
+import org.telegram.ui.Components.CustomUpdateAppAlertDialog;
 import org.telegram.ui.Components.UpdateAppAlertDialog;
+import org.telegram.ui.Components.CustomUpdateLayout;
 import org.telegram.ui.Components.UpdateLayout;
 import org.telegram.ui.IUpdateLayout;
 import org.telegram.ui.LaunchActivity;
@@ -49,9 +51,73 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
 
     }
 
+    // this build takes its updates from the releases of the repository below rather than from
+    // telegram: the ones that are not marked as a pre-release, which are the finished ones
+    public static final String GITHUB_REPOSITORY = "mehranlatifi83/Telegram";
+    public static final boolean GITHUB_PRE_RELEASE = false;
+
     @Override
     protected void checkForUpdatesInternal() {
+        GithubUpdaterController.configure(GITHUB_REPOSITORY, GITHUB_PRE_RELEASE, BuildConfig.PROJECT_VERSION_CODE);
+        GithubUpdaterController.getInstance().checkForUpdate(false, null);
+    }
 
+    @Override
+    public boolean isCustomUpdate() {
+        GithubUpdaterController.configure(GITHUB_REPOSITORY, GITHUB_PRE_RELEASE, BuildConfig.PROJECT_VERSION_CODE);
+        return GithubUpdaterController.getInstance().isConfigured();
+    }
+
+    @Override
+    public BetaUpdate getUpdate() {
+        if (!isCustomUpdate()) return null;
+        return GithubUpdaterController.getInstance().getUpdate();
+    }
+
+    @Override
+    public void checkUpdate(boolean force, Runnable whenDone) {
+        if (!isCustomUpdate()) return;
+        GithubUpdaterController.getInstance().checkForUpdate(force, whenDone);
+    }
+
+    @Override
+    public void downloadUpdate() {
+        if (!isCustomUpdate()) return;
+        GithubUpdaterController.getInstance().downloadUpdate();
+    }
+
+    @Override
+    public void cancelDownloadingUpdate() {
+        if (!isCustomUpdate()) return;
+        GithubUpdaterController.getInstance().cancelDownloadingUpdate();
+    }
+
+    @Override
+    public boolean isDownloadingUpdate() {
+        if (!isCustomUpdate()) return false;
+        return GithubUpdaterController.getInstance().isDownloading();
+    }
+
+    @Override
+    public float getDownloadingUpdateProgress() {
+        if (!isCustomUpdate()) return 0;
+        return GithubUpdaterController.getInstance().getDownloadingProgress();
+    }
+
+    @Override
+    public File getDownloadedUpdateFile() {
+        if (!isCustomUpdate()) return null;
+        return GithubUpdaterController.getInstance().getDownloadedFile();
+    }
+
+    @Override
+    public boolean showCustomUpdateAppPopup(Context context, BetaUpdate update, int account) {
+        try {
+            (new CustomUpdateAppAlertDialog(context, update, account)).show();
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+        return true;
     }
 
     protected void appCenterLogInternal(Throwable e) {
@@ -110,6 +176,9 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
 
     @Override
     public IUpdateLayout takeUpdateLayout(Activity activity, ViewGroup sideMenuContainer) {
+        if (isCustomUpdate()) {
+            return new CustomUpdateLayout(activity, sideMenuContainer);
+        }
         return new UpdateLayout(activity, sideMenuContainer);
     }
 
