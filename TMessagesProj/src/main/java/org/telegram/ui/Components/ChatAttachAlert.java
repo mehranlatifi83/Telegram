@@ -2971,6 +2971,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         ThemeBind.colorFilter(moveCaptionButton, Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider, PorterDuff.Mode.SRC_IN);
         moveCaptionButton.setImageResource(R.drawable.menu_link_above);
         moveCaptionButton.setVisibility(View.GONE);
+        moveCaptionButton.setContentDescription(getString(R.string.CaptionAbove));
         moveCaptionButton.setOnClickListener(v -> {
             if (!captionAbove) {
                 toggleCaptionAbove();
@@ -3499,6 +3500,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         topCommentMoveButton.setImageResource(R.drawable.menu_link_below);
         ThemeBind.colorFilter(topCommentMoveButton, Theme.key_chat_messagePanelIcons, resourcesProvider, PorterDuff.Mode.SRC_IN);
         topCommentTextView.addView(topCommentMoveButton, LayoutHelper.createFrame(40, 40, Gravity.BOTTOM | Gravity.RIGHT, 0, 0, 60, 0));
+        topCommentMoveButton.setContentDescription(getString(R.string.CaptionBelow));
         topCommentMoveButton.setOnClickListener(v -> {
             if (captionAbove) {
                 toggleCaptionAbove();
