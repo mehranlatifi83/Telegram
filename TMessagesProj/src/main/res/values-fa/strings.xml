@@ -143,4 +143,5 @@
     <string name="AccDescrWalletSwitchCurrency">تغییر واحد پول</string>
     <string name="AccDescrWidgetTab">زبانه</string>
     <string name="AccDescrWidgetPartlyChecked">نیمه‌علامت‌خورده</string>
+    <string name="AccDescrWidgetMessage">ویجت</string>
 </resources>
