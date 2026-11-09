@@ -1,0 +1,103 @@
+name: Post a release to the channel
+
+# Posts a published release to the maintainer's Telegram channel through the build bot: the apk with the
+# caption the channel uses for a beta (a pre-release) or an official version (a release), then the
+# changes, split into messages where a message would be too long.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag (13.2.1-729100 for a pre-release, v13.2.1-729100 for a release)
+        type: string
+        required: true
+      edit_message:
+        description: The id of a post of the channel whose file is replaced by this release's apk (nothing else is posted)
+        type: string
+        required: false
+      changes:
+        description: The changes, as the channel posts them
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The apk of ${{ inputs.tag }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.tag }}" -R "$GITHUB_REPOSITORY" -p '*.apk' -D apk
+          gh release view "${{ inputs.tag }}" -R "$GITHUB_REPOSITORY" --json isPrerelease,url,name --jq '.isPrerelease, .url, .name' > release.txt
+          ls -l apk
+
+      - name: Post
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_BOT_SESSION: ${{ secrets.TG_BOT_SESSION }}
+          TG_CHANNEL_ID: ${{ secrets.TG_CHANNEL_ID }}
+          CHANGES: ${{ inputs.changes }}
+          EDIT_MESSAGE: ${{ inputs.edit_message }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          pip install --quiet telethon==1.40.0
+          cat > /tmp/post.py <<'PY'
+          import asyncio, glob, os, re
+          from telethon import TelegramClient
+          from telethon.sessions import StringSession
+
+          LIMIT = 4000
+
+          async def call(coroutine):
+              # a reply of a newer layer than this library reads comes after the post is made: the post stands
+              try:
+                  await coroutine
+              except Exception as e:
+                  if type(e).__name__ != "TypeNotFoundError":
+                      raise
+                  print("posted; the reply was of a newer layer")
+
+          def chunks(text):
+              parts, current = [], ""
+              for block in text.strip().split("\n\n"):
+                  candidate = block if not current else current + "\n\n" + block
+                  if len(candidate) <= LIMIT:
+                      current = candidate
+                  else:
+                      if current:
+                          parts.append(current)
+                      current = block
+              if current:
+                  parts.append(current)
+              return parts
+
+          async def main():
+              prerelease, url, _ = open("release.txt", encoding="utf-8").read().split("\n")[:3]
+              version = re.match(r"v?([0-9.]+)-", os.environ["TAG"]).group(1)
+              kind = "نسخه بتای جدید" if prerelease.strip() == "true" else "نسخه رسمی"
+              caption = f"{kind} بر پایه تلگرام {version}\nلینک این نسخه در گیتهاب:\n{url.strip()}\n@mehran_latifi"
+              apk = glob.glob("apk/*.apk")[0]
+              client = TelegramClient(StringSession(os.environ["TG_BOT_SESSION"]), int(os.environ["TG_API_ID"]), os.environ["TG_API_HASH"])
+              await client.connect()
+              channel = int(os.environ["TG_CHANNEL_ID"])
+              edit = os.environ.get("EDIT_MESSAGE", "").strip()
+              if edit:
+                  await call(client.edit_message(channel, int(edit), caption, file=apk, force_document=True))
+                  print("replaced the file of", edit)
+                  await client.disconnect()
+                  return
+              await call(client.send_file(channel, apk, caption=caption, force_document=True))
+              print("posted", os.path.basename(apk))
+              for part in chunks(os.environ.get("CHANGES", "")):
+                  await call(client.send_message(channel, part, link_preview=False))
+                  print("posted", len(part), "characters")
+              await client.disconnect()
+
+          asyncio.run(main())
+          PY
+          python /tmp/post.py

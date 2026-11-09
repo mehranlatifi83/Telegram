@@ -1,0 +1,245 @@
+name: Build
+
+# Built only when asked, from the Actions tab: the beta (HA_public) and/or the standalone build of
+# the accessibility branch, signed with the same key and built with the same local settings as on
+# the computer of the maintainer. Those settings are never in the repository: they come from the
+# LOCAL_BUILD_FILES secret. Publishing is a choice made each time: the beta goes out as a
+# pre-release and the standalone build as a release, which is what the in-app updater looks for.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Which build
+        type: choice
+        options:
+          - HA_public
+          - standalone
+          - both
+        default: HA_public
+      ref:
+        description: Branch, tag or commit to build
+        type: string
+        default: accessibility
+      publish:
+        description: Publish it (HA_public as a pre-release, standalone as a release)
+        type: boolean
+        default: false
+      draft:
+        description: Publish it as a draft first, to be checked and released by hand
+        type: boolean
+        default: true
+      notes:
+        description: What the update dialog shows (the body of the release)
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ inputs.build }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      variants: ${{ steps.plan.outputs.variants }}
+    steps:
+      - id: plan
+        run: |
+          case "${{ inputs.build }}" in
+            HA_public) echo 'variants=["HA_public"]' >> "$GITHUB_OUTPUT" ;;
+            standalone) echo 'variants=["standalone"]' >> "$GITHUB_OUTPUT" ;;
+            *) echo 'variants=["HA_public","standalone"]' >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  build:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(needs.plan.outputs.variants) }}
+    env:
+      NDK_VERSION: 27.2.12479018
+      CMAKE_VERSION: 3.22.1
+      # the native code is compiled through ccache, which reuses an object only when the source,
+      # every header it reads, the flags and the compiler are exactly the same as before; anything
+      # that changed is compiled again
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CCACHE_DIR: /home/runner/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: 'true'
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 6G
+    steps:
+      - name: Make room on the disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/node_modules /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium
+          sudo docker image prune --all --force > /dev/null 2>&1 || true
+          df -h /
+
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK, NDK and CMake
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION" "build-tools;35.0.0" "build-tools;36.0.0" "platforms;android-36" > /dev/null
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Local build files
+        env:
+          LOCAL_BUILD_FILES: ${{ secrets.LOCAL_BUILD_FILES }}
+        run: |
+          if [ -z "$LOCAL_BUILD_FILES" ]; then
+            echo "The LOCAL_BUILD_FILES secret is missing" >&2
+            exit 1
+          fi
+          printf '%s' "$LOCAL_BUILD_FILES" | base64 -d | tar xz
+          python3 - <<'EOF'
+          import re
+          path = "TMessagesProj/src/main/res/values/strings.xml"
+          names = open("app-name-strings.txt", encoding="utf-8").read().splitlines()
+          s = open(path, encoding="utf-8").read()
+          for line in names:
+              key = re.search(r'name="([^"]+)"', line).group(1)
+              s, n = re.subn(r'[ \t]*<string name="%s">.*?</string>' % key, line.replace("\\", "\\\\"), s, count=1)
+              assert n == 1, key
+          open(path, "w", encoding="utf-8", newline="\n").write(s)
+          EOF
+          rm app-name-strings.txt
+          chmod +x gradlew
+          name=$(grep '^APP_VERSION_NAME=' gradle.properties | cut -d= -f2)
+          code=$(grep '^APP_VERSION_CODE=' gradle.properties | cut -d= -f2)
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$code" >> "$GITHUB_ENV"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: ccache
+        run: sudo apt-get install -y -qq ccache > /dev/null && ccache --zero-stats > /dev/null
+
+      - name: Compiled native code from earlier builds
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.ccache
+          key: ccache-${{ matrix.variant }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ matrix.variant }}-
+            ccache-
+
+      - name: Build ${{ matrix.variant }}
+        run: |
+          if [ "${{ matrix.variant }}" = "HA_public" ]; then
+            ./gradlew :TMessagesProj_AppHockeyApp:assembleAfatHA_public --stacktrace
+            src=$(find TMessagesProj_AppHockeyApp/build/outputs/apk -name '*.apk' | head -n 1)
+            out="Telegram-Beta-CodeLighthouse-v$VERSION_NAME-$VERSION_CODE.apk"
+          else
+            ./gradlew :TMessagesProj_AppStandalone:assembleAfatStandalone --stacktrace
+            src=$(find TMessagesProj_AppStandalone/build/outputs/apk -name '*.apk' | head -n 1)
+            out="Telegram-CodeLighthouse-v$VERSION_NAME-$VERSION_CODE.apk"
+          fi
+          test -n "$src"
+          mkdir -p dist
+          cp "$src" "dist/$out"
+          echo "APK=dist/$out" >> "$GITHUB_ENV"
+          echo "APK_NAME=${out%.apk}" >> "$GITHUB_ENV"
+          ccache --show-stats | head -n 12
+
+      - name: Signature
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+
+      - name: Leave nothing of the key behind
+        if: always()
+        run: rm -f TMessagesProj/config/release.keystore gradle.properties
+
+      - name: Keep the apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: ${{ env.APK }}
+          retention-days: 30
+
+      - name: Send to Telegram
+        # a failure to reach Telegram must not keep the build from being kept or published
+        continue-on-error: true
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_BOT_SESSION: ${{ secrets.TG_BOT_SESSION }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          if [ -z "$TG_BOT_SESSION" ]; then
+            echo "No TG_BOT_SESSION secret; nothing sent"
+            exit 0
+          fi
+          pip install --quiet telethon==1.40.0
+          # the bot reaches Telegram through MTProto, not the Bot API, so its 50 MB limit does not apply
+          cat > /tmp/send_to_telegram.py <<'PY'
+          import asyncio, os, sys
+          from telethon import TelegramClient
+          from telethon.sessions import StringSession
+
+          async def main(path, caption):
+              client = TelegramClient(StringSession(os.environ["TG_BOT_SESSION"]), int(os.environ["TG_API_ID"]), os.environ["TG_API_HASH"])
+              await client.connect()
+              if not await client.is_user_authorized():
+                  sys.exit("the bot's session is not signed in")
+              last = [-1]
+              def progress(done, total):
+                  p = done * 100 // total
+                  if p >= last[0] + 10:
+                      last[0] = p
+                      print("uploaded %d%%" % p, flush=True)
+              await client.send_file(int(os.environ["TG_CHAT_ID"]), path, caption=caption, force_document=True, progress_callback=progress)
+              await client.disconnect()
+              print("sent", os.path.basename(path))
+
+          asyncio.run(main(sys.argv[1], sys.argv[2]))
+          PY
+          python /tmp/send_to_telegram.py "$APK" "$APK_NAME ($(git rev-parse --short HEAD))"
+
+      - name: Publish
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          if [ "${{ matrix.variant }}" = "HA_public" ]; then
+            tag="$VERSION_NAME-$VERSION_CODE"
+            kind="--prerelease"
+            title="Telegram Beta $VERSION_NAME (CodeLighthouse)"
+          else
+            tag="v$VERSION_NAME-$VERSION_CODE"
+            kind="--latest"
+            title="Telegram $VERSION_NAME (CodeLighthouse)"
+          fi
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "A release named $tag is already there; raise APP_VERSION_CODE for a new one" >&2
+            exit 1
+          fi
+          # a draft is seen by nobody, the updater included, until it is released by hand
+          draft=""
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            draft="--draft"
+          fi
+          # the updater reads the version code from this line of the body
+          printf '%s\n\nversion_code: %s\n' "${NOTES:-Telegram $VERSION_NAME}" "$VERSION_CODE" > notes.md
+          gh release create "$tag" "$APK" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "$title" --notes-file notes.md $kind $draft

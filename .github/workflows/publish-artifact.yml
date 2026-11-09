@@ -1,0 +1,70 @@
+name: Publish an apk of an earlier build
+
+# Publishes the apk kept by an earlier run of Build, the way Build's own Publish step does (the same tags, titles
+# and body), for a run whose build went through but whose publishing did not.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The id of the Build run whose apk is published
+        type: string
+        required: true
+      ref:
+        description: The commit the apk was built from (the release's target)
+        type: string
+        required: true
+      replace:
+        description: The release is there already; put this apk in the place of its apk (same name) and point it at `ref`
+        type: boolean
+        default: false
+      draft:
+        description: Publish it as a draft first
+        type: boolean
+        default: true
+      notes:
+        description: What the update dialog shows (the body of the release)
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          gh run download "${{ inputs.run_id }}" -R "$GITHUB_REPOSITORY" -D apk
+          apk=$(find apk -name '*.apk' | head -n 1)
+          test -n "$apk"
+          name=$(basename "$apk" .apk)
+          version=$(echo "$name" | sed -E 's/.*-v([0-9.]+)-([0-9]+)$/\1/')
+          code=$(echo "$name" | sed -E 's/.*-v([0-9.]+)-([0-9]+)$/\2/')
+          case "$name" in
+            Telegram-Beta-*)
+              tag="$version-$code"; kind="--prerelease"; title="Telegram Beta $version (CodeLighthouse)" ;;
+            *)
+              tag="v$version-$code"; kind="--latest"; title="Telegram $version (CodeLighthouse)" ;;
+          esac
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            if [ "${{ inputs.replace }}" = "true" ]; then
+              gh release upload "$tag" "$apk" -R "$GITHUB_REPOSITORY" --clobber
+              gh release edit "$tag" -R "$GITHUB_REPOSITORY" --target "${{ inputs.ref }}"
+              echo "replaced the apk of $tag"
+              exit 0
+            fi
+            echo "A release named $tag is already there" >&2
+            exit 1
+          fi
+          draft=""
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            draft="--draft"
+          fi
+          printf '%s\n\nversion_code: %s\n' "${NOTES:-Telegram $version}" "$code" > notes.md
+          gh release create "$tag" "$apk" -R "$GITHUB_REPOSITORY" --target "${{ inputs.ref }}" --title "$title" --notes-file notes.md $kind $draft

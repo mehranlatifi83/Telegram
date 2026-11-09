@@ -1,0 +1,61 @@
+name: Send an apk to Telegram
+
+# Sends the apk kept by an earlier run of Build to the maintainer's private chat with the build bot,
+# without building anything again.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The id of the Build run whose apk is sent (the number at the end of its address)
+        type: string
+        required: true
+
+permissions:
+  actions: read
+
+jobs:
+  send:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The apk of run ${{ inputs.run_id }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ inputs.run_id }}" -R "$GITHUB_REPOSITORY" -D apk
+          ls -lR apk
+
+      - name: Send to Telegram
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_BOT_SESSION: ${{ secrets.TG_BOT_SESSION }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          pip install --quiet telethon==1.40.0
+          # the bot reaches Telegram through MTProto, not the Bot API, so its 50 MB limit does not apply
+          cat > /tmp/send_to_telegram.py <<'PY'
+          import asyncio, os, sys
+          from telethon import TelegramClient
+          from telethon.sessions import StringSession
+
+          async def main(path, caption):
+              client = TelegramClient(StringSession(os.environ["TG_BOT_SESSION"]), int(os.environ["TG_API_ID"]), os.environ["TG_API_HASH"])
+              await client.connect()
+              if not await client.is_user_authorized():
+                  sys.exit("the bot's session is not signed in")
+              last = [-1]
+              def progress(done, total):
+                  p = done * 100 // total
+                  if p >= last[0] + 10:
+                      last[0] = p
+                      print("uploaded %d%%" % p, flush=True)
+              await client.send_file(int(os.environ["TG_CHAT_ID"]), path, caption=caption, force_document=True, progress_callback=progress)
+              await client.disconnect()
+              print("sent", os.path.basename(path))
+
+          asyncio.run(main(sys.argv[1], sys.argv[2]))
+          PY
+          find apk -name '*.apk' | while read -r f; do
+            python /tmp/send_to_telegram.py "$f" "$(basename "${f%.apk}")"
+          done
