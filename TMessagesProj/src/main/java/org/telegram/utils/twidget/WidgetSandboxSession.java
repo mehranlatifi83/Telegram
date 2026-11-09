@@ -623,7 +623,8 @@ public final class WidgetSandboxSession {
             int passes,
             int builds,
             int ops,
-            WidgetText text) {
+            WidgetText text,
+            WidgetAccessibility accessibility) {
         boolean loaded = rendered;
         synchronized (publicationLock) {
             if (closed) {
@@ -635,7 +636,7 @@ public final class WidgetSandboxSession {
             pending =
                     new Frame(
                             node, layers, clockOffset, width, height, layout, record, passes,
-                            builds, ops, text, loaded, anchorBottom);
+                            builds, ops, text, accessibility, loaded, anchorBottom);
             schedulePublicationLocked();
         }
         lastFrameHeight = height;
@@ -759,6 +760,8 @@ public final class WidgetSandboxSession {
         final float layout, record;
         /** The text the widget made selectable, as this frame lays it out; null for none. */
         public final WidgetText text;
+        /** What a screen reader finds in the widget as this frame lays it out; never null. */
+        public final WidgetAccessibility accessibility;
         /** Recorded after the renderer applied what the widget built on load (WidgetHost's `rendered`). */
         final boolean loaded;
         /** The widget's resize anchor when this frame was recorded: true for `bottom`, false for `top`. */
@@ -776,9 +779,11 @@ public final class WidgetSandboxSession {
                 int builds,
                 int ops,
                 WidgetText text,
+                WidgetAccessibility accessibility,
                 boolean loaded,
                 boolean anchorBottom) {
             this.text = text;
+            this.accessibility = accessibility == null ? WidgetAccessibility.EMPTY : accessibility;
             this.loaded = loaded;
             this.anchorBottom = anchorBottom;
             this.node = node;
