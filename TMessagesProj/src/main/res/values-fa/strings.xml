@@ -141,4 +141,6 @@
     <string name="AccDescrAlignMiddle">تراز میانه</string>
     <string name="AccDescrAlignBottom">تراز پایین</string>
     <string name="AccDescrWalletSwitchCurrency">تغییر واحد پول</string>
+    <string name="AccDescrWidgetTab">زبانه</string>
+    <string name="AccDescrWidgetPartlyChecked">نیمه‌علامت‌خورده</string>
 </resources>
