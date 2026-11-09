@@ -11680,4 +11680,5 @@
     <string name="FpnvConsentPhoneNumber">Phone Number</string>
     <string name="AccDescrWidgetTab">Tab</string>
     <string name="AccDescrWidgetPartlyChecked">Partly checked</string>
+    <string name="AccDescrWidgetMessage">Widget</string>
 </resources>

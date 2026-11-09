@@ -496,11 +496,61 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
                 info.setText(TextUtils.concat(node.name, ", ", state));
             }
         }
+        // a widget is web content: a screen reader goes through it by headings, links, controls and the like
+        info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_NEXT_HTML_ELEMENT);
+        info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_PREVIOUS_HTML_ELEMENT);
         boolean pressable = node.actionable && !node.disabled;
         info.setClickable(pressable);
         if (!pressable) info.removeAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK);
         info.removeAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK);
         info.setLongClickable(false);
+    }
+
+    @Override
+    public CharSequence getAccessibilityKind() {
+        return LocaleController.getString(R.string.AccDescrWidgetMessage);
+    }
+
+    @Override
+    public int findAccessibilityHtmlElement(int from, boolean forward, String type) {
+        final java.util.List<WidgetAccessibility.Node> nodes = accessibility().nodes;
+        final int step = forward ? 1 : -1;
+        for (int i = from + step; i >= 0 && i < nodes.size(); i += step) {
+            if (matchesHtmlElement(nodes.get(i), type)) return i;
+        }
+        return -1;
+    }
+
+    /** Whether the node is of the kind a screen reader names in ACTION_ARGUMENT_HTML_ELEMENT_STRING. */
+    private static boolean matchesHtmlElement(WidgetAccessibility.Node node, String type) {
+        if (type == null || type.isEmpty()) return true;
+        switch (type.toUpperCase(java.util.Locale.ROOT)) {
+            case "HEADING":
+                return node.isHeading();
+            case "H1": case "H2": case "H3": case "H4": case "H5": case "H6":
+                return node.isHeading() && node.level == type.charAt(1) - '0';
+            case "LINK":
+            case "VISITED_LINK":
+            case "UNVISITED_LINK":
+                return "link".equals(node.role);
+            case "BUTTON":
+                return "button".equals(node.role) || "menuitem".equals(node.role);
+            case "CHECKBOX":
+                return "checkbox".equals(node.role) || "switch".equals(node.role);
+            case "RADIO":
+                return "radio".equals(node.role);
+            case "GRAPHIC":
+            case "IMAGE":
+                return "image".equals(node.role);
+            case "CONTROL":
+            case "FOCUSABLE":
+                return node.actionable || node.isRange();
+            case "TEXT":
+            case "PARAGRAPH":
+                return node.isText();
+            default:
+                return false;
+        }
     }
 
     private static String accessibilityClassName(WidgetAccessibility.Node node) {
