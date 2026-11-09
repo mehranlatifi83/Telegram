@@ -5737,7 +5737,7 @@ std::string Renderer::accessibility_json() const {
     };
     Paragraph para;
     auto grow = [&](const litehtml::position& box) {
-        if (box.width <= 0 && box.height <= 0) return;
+        if (float(box.width) <= 0.f && float(box.height) <= 0.f) return;
         float x0 = float(box.x), y0 = float(box.y), x1 = float(box.x + box.width), y1 = float(box.y + box.height);
         if (!para.any) {
             para.x0 = x0;

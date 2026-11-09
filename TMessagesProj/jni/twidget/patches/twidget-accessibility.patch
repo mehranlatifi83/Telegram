@@ -1,5 +1,5 @@
 diff --git a/TMessagesProj/jni/twidget/twidget/Sources/TwidgetCore/src/renderer.cpp b/TMessagesProj/jni/twidget/twidget/Sources/TwidgetCore/src/renderer.cpp
-index 44c61efe2..43058e11a 100644
+index 44c61efe2..701104f27 100644
 --- a/TMessagesProj/jni/twidget/twidget/Sources/TwidgetCore/src/renderer.cpp
 +++ b/TMessagesProj/jni/twidget/twidget/Sources/TwidgetCore/src/renderer.cpp
 @@ -5614,6 +5614,272 @@ std::string Renderer::selectable_text_json() const {
@@ -129,7 +129,7 @@ index 44c61efe2..43058e11a 100644
 +    };
 +    Paragraph para;
 +    auto grow = [&](const litehtml::position& box) {
-+        if (box.width <= 0 && box.height <= 0) return;
++        if (float(box.width) <= 0.f && float(box.height) <= 0.f) return;
 +        float x0 = float(box.x), y0 = float(box.y), x1 = float(box.x + box.width), y1 = float(box.y + box.height);
 +        if (!para.any) {
 +            para.x0 = x0;
