@@ -191,6 +191,7 @@ import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.MsgClockDrawable;
 import org.telegram.ui.Components.PostRunnableHolder;
 import org.telegram.ui.Components.Premium.boosts.BoostCounterSpan;
+import org.telegram.ui.Components.Premium.boosts.cells.msg.GiveawayAccessibilityCard;
 import org.telegram.ui.Components.Premium.boosts.cells.msg.GiveawayMessageCell;
 import org.telegram.ui.Components.Premium.boosts.cells.msg.GiveawayResultsMessageCell;
 import org.telegram.ui.Components.QuoteHighlight;
@@ -224,6 +225,7 @@ import org.telegram.ui.Components.URLSpanBotCommand;
 import org.telegram.ui.Components.URLSpanBrowser;
 import org.telegram.ui.Components.URLSpanMono;
 import org.telegram.ui.Components.URLSpanNoUnderline;
+import org.telegram.ui.Components.URLSpanUserMention;
 import org.telegram.ui.Components.VectorAvatarThumbDrawable;
 import org.telegram.ui.Components.VideoForwardDrawable;
 import org.telegram.ui.Components.AvatarsListDrawable;
@@ -581,6 +583,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         default void didPressUserAvatar(ChatMessageCell cell, TLRPC.User user, float touchX, float touchY, boolean asForward) {
         }
 
+        /** Whether holding the avatar of a sender opens anything in this chat. */
+        default boolean canLongPressAvatar(ChatMessageCell cell) {
+            return false;
+        }
+
         default boolean didLongPressUserAvatar(ChatMessageCell cell, TLRPC.User user, float touchX, float touchY) {
             return false;
         }
@@ -793,6 +800,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return false;
         }
 
+        // whether this message is among the ones chosen, and choosing or letting go of it. Both
+        // are the chat's to answer: the cell draws a tick but is never told what it stands for
+        default boolean isMessageSelected(MessageObject message) {
+            return false;
+        }
+
+        default void didPressSelect(ChatMessageCell cell) {
+        }
+
         default void videoTimerReached() {
         }
 
@@ -970,6 +986,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         Text author;
         public AnimatedEmojiSpan.EmojiGroupedSpans animatedEmoji;
         TLRPC.PollAnswer answer;
+        ArrayList<TLRPC.Peer> recentVoters;
         TLRPC.TodoItem task;
         boolean translated;
         public int selectorDrawableColor;
@@ -1153,7 +1170,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     boolean drawSelectionBackground;
     private CheckBoxBase mediaCheckBox;
     private CheckBoxBase checkBox;
-    private boolean checkBoxVisible;
+    boolean checkBoxVisible;
     private boolean checkBoxAnimationInProgress;
     private float checkBoxAnimationProgress;
     private long lastCheckBoxAnimationTime;
@@ -1213,7 +1230,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     boolean drawInstantView;
     RectF contactRect;
     ChatMessageContact contact;
-    private ChatMessagePoll poll;
+    ChatMessagePoll poll;
     public int drawInstantViewType;
     public CharSequence instantViewButtonText;
     int imageBackgroundSideColor;
@@ -1231,6 +1248,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private final MaskDrawable[] selectorMaskDrawable = new MaskDrawable[2];
     int[] selectorDrawableMaskType = new int[2];
     RectF instantButtonRect = new RectF();
+    // where the button under a link preview is, for the tree to point at. The rect the touch code
+    // hit tests against is only filled in for the older style that draws the button on its own
+    // below the preview; the style that draws it inside the preview leaves it empty, and touches
+    // on it are taken by the preview as a whole. Keeping a rect of our own means the button can be
+    // named and reached without giving the touch code a region it never had.
+    final RectF instantButtonAccessibilityRect = new RectF();
     final int[] pressedState = new int[]{android.R.attr.state_enabled, android.R.attr.state_pressed};
     private float animatingLoadingProgressProgress;
     CharSequence accessibilityText;
@@ -1238,6 +1261,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     long accessibilityTextFileSize;
     int accessibilityTextButtonState = Integer.MIN_VALUE, accessibilityTextMiniButtonState = Integer.MIN_VALUE;
     int accessibilityTextTransferIndex = -1;
+    boolean accessibilityTextMediaDownloaded;
+    int accessibilityStateMessageId = Integer.MIN_VALUE;
+    boolean accessibilityStateDownloaded, accessibilityStateContentUnread, accessibilityStateUnread;
+    CharSequence accessibilityStateReactions;
     boolean wasTranscriptionOpen;
 
     private int nameLayoutSelectorColor;
@@ -1709,10 +1736,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     TLRPC.User currentForwardUser;
     private TLRPC.User currentViaBotUser;
+    // the bot a message was sent through, in the words drawn at its top, while they are drawn
+    CharSequence accessibilityViaBotText;
     TLRPC.Chat currentForwardChannel;
     String currentForwardName;
     private String currentForwardNameString;
-    private boolean replyPanelIsForward;
+    boolean replyPanelIsForward;
     private boolean animationRunning;
     private boolean willRemoved;
     public AnimatedEmojiSpan.EmojiGroupedSpans animatedEmojiStack;
@@ -2879,6 +2908,54 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return pressedEffect;
     }
 
+    boolean isTodoItemDone(int index, PollButton button) {
+        // while the tick is still travelling the box holds the newer answer of the two
+        if (pollCheckBox != null && index >= 0 && index < pollCheckBox.length && pollCheckBox[index] != null) {
+            return pollCheckBox[index].isChecked();
+        }
+        return button != null && button.chosen;
+    }
+
+    /**
+     * What a press on the button under a poll does. Most of what it can be is worked out here and
+     * nowhere else: sending the answers that were ticked, looking at the results without voting,
+     * and going back from them. Only two of the things it can be are passed on to the chat, so an
+     * action that passed the press on and nothing more did nothing at all for the rest — the very
+     * button that sends a poll that takes more than one answer among them.
+     */
+    void performPollInstantButton() {
+        if (delegate == null || currentMessageObject == null) {
+            return;
+        }
+        if (currentMessageObject.scheduled) {
+            Toast.makeText(getContext(), getString(R.string.MessageScheduledVoteResults), Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (poll != null && poll.inInputNewOption) {
+            delegate.didPressInstantButton(this, INSTANT_BUTTON_TYPE_ADD_OPTION);
+        } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_VIEW_VOTES_PUBLIC_LIST) {
+            delegate.didPressInstantButton(this, INSTANT_BUTTON_TYPE_VIEW_VOTES_PUBLIC_LIST);
+        } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_VOTE_MULTISELECT) {
+            if (!currentMessageObject.checkedVotes.isEmpty()) {
+                pollVoteInProgressNum = -1;
+                pollVoteInProgress = true;
+                vibrateOnPollVote = true;
+                voteCurrentProgressTime = 0.0f;
+                firstCircleLength = true;
+                voteCurrentCircleLength = 360;
+                voteRisingCircleLength = false;
+            }
+            delegate.didPressVoteButtons(this, currentMessageObject.checkedVotes, -1, 0, namesOffset);
+        } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_VIEW_VOTES_AS_AUTHOR_LIST) {
+            currentMessageObject.forceShowPollResults = true;
+            pollVoteInProgress = true;
+            delegate.didTogglePollPreview(this);
+        } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_BACK_TO_VOTE) {
+            currentMessageObject.forceShowPollResults = false;
+            delegate.didTogglePollPreview(this);
+        }
+    }
+
     public void didPressVoteHint() {
         /*
         if (delegate != null) {
@@ -2919,33 +2996,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             if (instantPressed) {
                 if (delegate != null) {
                     if (lastPoll != null) {
-                        if (currentMessageObject.scheduled) {
-                            Toast.makeText(getContext(), getString(R.string.MessageScheduledVoteResults), Toast.LENGTH_LONG).show();
-                        } else {
-                            if (poll != null && poll.inInputNewOption) {
-                                delegate.didPressInstantButton(this, ChatMessageCell.INSTANT_BUTTON_TYPE_ADD_OPTION);
-                            } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_VIEW_VOTES_PUBLIC_LIST) {
-                                delegate.didPressInstantButton(this, INSTANT_BUTTON_TYPE_VIEW_VOTES_PUBLIC_LIST);
-                            } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_VOTE_MULTISELECT) {
-                                if (!currentMessageObject.checkedVotes.isEmpty()) {
-                                    pollVoteInProgressNum = -1;
-                                    pollVoteInProgress = true;
-                                    vibrateOnPollVote = true;
-                                    voteCurrentProgressTime = 0.0f;
-                                    firstCircleLength = true;
-                                    voteCurrentCircleLength = 360;
-                                    voteRisingCircleLength = false;
-                                }
-                                delegate.didPressVoteButtons(this, currentMessageObject.checkedVotes, -1, 0, namesOffset);
-                            } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_VIEW_VOTES_AS_AUTHOR_LIST) {
-                                currentMessageObject.forceShowPollResults = true;
-                                pollVoteInProgress = true;
-                                delegate.didTogglePollPreview(this);
-                            } else if (drawInstantViewType == INSTANT_BUTTON_TYPE_BACK_TO_VOTE) {
-                                currentMessageObject.forceShowPollResults = false;
-                                delegate.didTogglePollPreview(this);
-                            }
-                        }
+                        performPollInstantButton();
                     } else {
                         delegate.didPressInstantButton(this, drawInstantViewType);
                     }
@@ -3171,6 +3222,21 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return result;
     }
 
+    // a screen reader reaches the poll through these; the work is done in ChatMessagePoll
+    boolean isPollOptionTickable(PollButton button) {
+        return poll != null && poll.isPollOptionTickable(button);
+    }
+
+    boolean isPollOptionTicked(int index, PollButton button) {
+        return poll != null && poll.isPollOptionTicked(index, button);
+    }
+
+    void performPollButtonPress(int index) {
+        if (poll != null) {
+            poll.performPollButtonPress(index);
+        }
+    }
+
     void setInstantButtonPressed(boolean pressed) {
         if (instantButtonBounce == null) {
             instantButtonBounce = new ButtonBounce(this);
@@ -3197,6 +3263,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 if (instantViewButton.selectorDrawable != null) {
                     instantViewButton.selectorDrawable.setState(StateSet.NOTHING);
                 }
+            }
+            // the explanation is part of what the message says, so opening or closing it leaves a
+            // screen reader on a message whose text is no longer the one it read
+            if (AndroidUtilities.isAccessibilityScreenReaderEnabled()) {
+                sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
             }
         }
     }
@@ -5427,6 +5498,277 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
 
+    CharSequence pollMediaDescription(TLRPC.MessageMedia media) {
+        if (media == null) {
+            return null;
+        }
+        if (media instanceof TLRPC.TL_messageMediaPhoto) {
+            return getString(R.string.AttachPhoto);
+        }
+        if (media instanceof TLRPC.TL_messageMediaGeo || media instanceof TLRPC.TL_messageMediaGeoLive || media instanceof TLRPC.TL_messageMediaVenue) {
+            return getString(R.string.AttachLocation);
+        }
+        if (media instanceof TLRPC.TL_messageMediaWebPage) {
+            return getString(R.string.LinkPreview);
+        }
+        final TLRPC.Document document = media.document;
+        if (document != null) {
+            if (MessageObject.isStickerDocument(document) || MessageObject.isAnimatedStickerDocument(document, true)) {
+                return getString(R.string.AttachSticker);
+            }
+            if (MessageObject.isGifDocument(document)) {
+                return getString(R.string.AttachGif);
+            }
+            if (MessageObject.isVideoDocument(document)) {
+                return getString(R.string.AttachVideo);
+            }
+            if (MessageObject.isMusicDocument(document)) {
+                return getString(R.string.AttachMusic);
+            }
+            if (MessageObject.isVoiceDocument(document)) {
+                return getString(R.string.AttachAudio);
+            }
+            final String name = FileLoader.getDocumentFileName(document);
+            if (!TextUtils.isEmpty(name)) {
+                return name;
+            }
+        }
+        return getString(R.string.AttachDocument);
+    }
+
+    boolean hasPollDescriptionMedia() {
+        return poll != null && poll.contentDrawable != null && poll.contentDrawable.isHasMedia() && poll.contentDrawable.getMedia() != null;
+    }
+
+    boolean hasPollExplanationMedia() {
+        return currentMessageObject != null && currentMessageObject.expandedExplanation
+            && poll != null && poll.explanationDrawable != null && poll.explanationDrawable.isHasMedia() && poll.explanationDrawable.getMedia() != null;
+    }
+
+    /**
+     * The names behind the faces drawn on a poll. A few of the last to vote are shown beside the
+     * kind of poll and beside every answer they picked, and they are shown to everyone who can see
+     * the poll, from the moment there are any: the list of votes behind the button at the bottom
+     * only opens once this account has voted or the poll has closed, so until then the faces are
+     * the only place these names are.
+     *
+     * The server sends them for a public poll alone, and this asks for that as well, so nothing is
+     * ever said that is not also drawn.
+     */
+    CharSequence pollRecentVoterNames(ArrayList<TLRPC.Peer> peers) {
+        if (peers == null || peers.isEmpty() || lastPoll == null || !lastPoll.public_voters) {
+            return null;
+        }
+        final StringBuilder names = new StringBuilder();
+        for (int a = 0; a < peers.size(); a++) {
+            final String name = DialogObject.getName(DialogObject.getPeerDialogId(peers.get(a)));
+            if (TextUtils.isEmpty(name)) {
+                continue;
+            }
+            if (names.length() > 0) {
+                names.append(", ");
+            }
+            names.append(name);
+        }
+        return names.length() == 0 ? null : formatString(R.string.AccDescrPollVotedBy, names);
+    }
+
+    /**
+     * A run of monospace text, or a block of code with a copy button under it. A press held on the
+     * one and a press on the other put it on the clipboard, and a screen reader could reach
+     * neither: what it had was a single action named after nothing in particular, which copied
+     * whichever block of code came first and left every other one out of reach.
+     */
+    static class CopyableText {
+        final CharSequence text;
+        final URLSpanMono span;
+        final MessageObject.TextLayoutBlock block;
+
+        CopyableText(CharSequence text, URLSpanMono span, MessageObject.TextLayoutBlock block) {
+            this.text = text;
+            this.span = span;
+            this.block = block;
+        }
+    }
+
+    // a message with more separately copyable runs than this is not one anybody would want to
+    // walk an action menu of
+    static final int MAX_COPY_TEXT_ACTIONS = 16;
+
+    // an action carries an id of its own. TalkBack lists a custom action in its menu only when the id is above the ones the system keeps for itself, which a resource id always is and an id handed out for a view never is, so the ids come from a fixed list
+    static final int[] COPY_TEXT_ACTION_IDS = { R.id.acc_action_copy_text_0, R.id.acc_action_copy_text_1, R.id.acc_action_copy_text_2, R.id.acc_action_copy_text_3, R.id.acc_action_copy_text_4, R.id.acc_action_copy_text_5, R.id.acc_action_copy_text_6, R.id.acc_action_copy_text_7, R.id.acc_action_copy_text_8, R.id.acc_action_copy_text_9, R.id.acc_action_copy_text_10, R.id.acc_action_copy_text_11, R.id.acc_action_copy_text_12, R.id.acc_action_copy_text_13, R.id.acc_action_copy_text_14, R.id.acc_action_copy_text_15 };
+
+    final ArrayList<CopyableText> copyableTexts = new ArrayList<>();
+
+    static int copyTextActionId(int index) {
+        return COPY_TEXT_ACTION_IDS[index];
+    }
+
+    static int copyTextActionIndex(int action) {
+        for (int i = 0; i < COPY_TEXT_ACTION_IDS.length; i++) {
+            if (COPY_TEXT_ACTION_IDS[i] == action) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    boolean canCopyFromMessage() {
+        if (currentMessageObject == null) {
+            return false;
+        }
+        if (currentMessageObject.getDialogId() == UserObject.VERIFY) {
+            return true;
+        }
+        // where copying is not allowed the copy button under a block of code is not drawn either,
+        // and a press held on a run of monospace text quietly does nothing
+        return !(MessagesController.getInstance(currentAccount).isPeerNoForwards(currentMessageObject.getDialogId())
+            || currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.noforwards);
+    }
+
+    void collectCopyableTexts() {
+        copyableTexts.clear();
+        if (!canCopyFromMessage()) {
+            return;
+        }
+        // a message laid out in blocks keeps its code and its monospace runs in those blocks, and a
+        // tap on either of them copies it, the way a press held on a run of monospace text does
+        if (currentMessageObject.richLayout != null && !currentMessageObject.richLayout.blocks.isEmpty()) {
+            final byte type = (byte) (currentMessageObject.isOutOwner() ? 1 : 0);
+            for (CharSequence text : currentMessageObject.richLayout.getAccessibilityCopyableTexts()) {
+                if (copyableTexts.size() >= MAX_COPY_TEXT_ACTIONS) {
+                    break;
+                }
+                copyableTexts.add(new CopyableText(text, new URLSpanMono(text, 0, text.length(), type), null));
+            }
+        }
+        addCopyableMonoRuns(currentMessageObject.messageText);
+        addCopyableCodeBlocks(currentMessageObject.textLayoutBlocks);
+        addCopyableMonoRuns(currentMessageObject.caption);
+        addCopyableCodeBlocks(captionLayout == null ? null : captionLayout.textLayoutBlocks);
+    }
+
+    void addCopyableMonoRuns(CharSequence text) {
+        if (!(text instanceof Spanned)) {
+            return;
+        }
+        final Spanned spanned = (Spanned) text;
+        final URLSpanMono[] spans = spanned.getSpans(0, spanned.length(), URLSpanMono.class);
+        if (spans == null || spans.length == 0) {
+            return;
+        }
+        // what order they come back in is not promised, and the order they are read in should be
+        // the order they are written in
+        Arrays.sort(spans, (a, b) -> spanned.getSpanStart(a) - spanned.getSpanStart(b));
+        for (URLSpanMono span : spans) {
+            if (copyableTexts.size() >= MAX_COPY_TEXT_ACTIONS) {
+                return;
+            }
+            final int start = spanned.getSpanStart(span);
+            final int end = spanned.getSpanEnd(span);
+            if (start < 0 || end <= start) {
+                continue;
+            }
+            copyableTexts.add(new CopyableText(spanned.subSequence(start, end), span, null));
+        }
+    }
+
+    void addCopyableCodeBlocks(ArrayList<MessageObject.TextLayoutBlock> blocks) {
+        if (blocks == null) {
+            return;
+        }
+        for (MessageObject.TextLayoutBlock block : blocks) {
+            if (copyableTexts.size() >= MAX_COPY_TEXT_ACTIONS) {
+                return;
+            }
+            // a short block of code has no copy button drawn under it, but it is code all the same,
+            // and copying it goes the way the button would
+            if (!(block.hasCodeCopyButton || block.code) || block.textLayout == null || block.textLayout.getText() == null) {
+                continue;
+            }
+            copyableTexts.add(new CopyableText(block.textLayout.getText(), null, block));
+        }
+    }
+
+    CharSequence copyActionLabel(CharSequence text) {
+        // a block of code is many lines, and the name of an action is one
+        CharSequence label = AndroidUtilities.replaceNewLines(text);
+        if (label.length() > 64) {
+            label = label.subSequence(0, 64) + "…";
+        }
+        return label;
+    }
+
+    /**
+     * That this message belongs to an album, what it is, and which of how many. Every message of an
+     * album is drawn in a cell of its own, so going through one is a run of messages that say the
+     * same thing, with nothing to tell them apart or say how far along they are.
+     */
+    /**
+     * What one message of an album is. The name a message gives itself answers "album" for
+     * anything that belongs to one, which is the word already said before it and no use here.
+     */
+    CharSequence albumAccessibilityKind() {
+        final MessageObject message = currentMessageObject;
+        if (message == null) {
+            return null;
+        }
+        if (message.isVideo()) {
+            return getString(R.string.AttachVideo);
+        }
+        if (message.isGif()) {
+            return getString(R.string.AttachGif);
+        }
+        if (message.isVoice()) {
+            return getString(R.string.AttachAudio);
+        }
+        if (message.isMusic()) {
+            return getString(R.string.AttachMusic);
+        }
+        if (message.type == MessageObject.TYPE_PHOTO) {
+            return getString(R.string.AttachPhoto);
+        }
+        if (message.isDocument()) {
+            return getString(R.string.AttachDocument);
+        }
+        return null;
+    }
+
+    CharSequence albumAccessibilityPlace() {
+        if (currentMessageObject == null || currentMessagesGroup == null || currentPosition == null) {
+            return null;
+        }
+        final ArrayList<MessageObject> messages = currentMessagesGroup.messages;
+        final int count = messages == null ? 0 : messages.size();
+        if (count <= 1) {
+            return null;
+        }
+        int index = -1;
+        for (int a = 0; a < count; a++) {
+            final MessageObject message = messages.get(a);
+            if (message != null && message.getId() == currentMessageObject.getId()) {
+                index = a;
+                break;
+            }
+        }
+        if (index < 0) {
+            return null;
+        }
+        // a group is kept in the order it was sent in, which is turned around when the chat it is
+        // in grows the other way
+        if (currentMessagesGroup.reversed) {
+            index = count - 1 - index;
+        }
+        // what this one is, in the word the app already has for it, so an album of several kinds
+        // says of each of its messages which kind it is
+        final CharSequence kind = albumAccessibilityKind();
+        final CharSequence place = formatString(R.string.Of, index + 1, count);
+        if (TextUtils.isEmpty(kind)) {
+            return TextUtils.concat(getString(R.string.Album), ", ", place);
+        }
+        return TextUtils.concat(getString(R.string.Album), ", ", kind, " ", place);
+    }
+
     void didClickedPollImage(ChatMessageCell cell, ImageReceiver imageReceiver, TLRPC.PollAnswer answer, TLRPC.MessageMedia media, float x, float y, int unshuffledIndex) {
         /*if (unshuffledIndex == PollAttachedMediaPack.INDEX_DESCRIPTION) {
             if (pollContentDrawable != null && pollContentDrawable.getMedia() != null && pollContentDrawable.getMedia().document != null && (pollContentDrawable.isFile() || pollContentDrawable.isMusic())) {
@@ -5443,6 +5785,222 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (delegate != null) {
             delegate.didPressPollMedia(cell, imageReceiver, answer, media, x, y, unshuffledIndex);
         }
+    }
+
+    // the chats a giveaway runs in, and the winners it ended with, are drawn as a row of buttons
+    // that open them. They are drawn by hand and are no views of their own, so touch exploration
+    // had nothing to land on and nothing to press
+    GiveawayAccessibilityCard giveawayAccessibilityCard() {
+        if (currentMessageObject == null) {
+            return null;
+        }
+        if (currentMessageObject.isGiveaway()) {
+            return giveawayMessageCell;
+        }
+        if (currentMessageObject.isGiveawayResults()) {
+            return giveawayResultsMessageCell;
+        }
+        return null;
+    }
+
+    static final String DICE_SLOT_MACHINE = "\uD83C\uDFB0";
+    static final String DICE_DARTS = "\uD83C\uDFAF";
+    static final String DICE_BASKETBALL = "\uD83C\uDFC0";
+    static final String DICE_FOOTBALL = "\u26BD";
+    static final String DICE_BOWLING = "\uD83C\uDFB3";
+
+    /**
+     * What a thrown game emoji landed on. The number is the whole of it for most of them; a slot
+     * machine keeps three reels packed into the one number and is read out as the three of them.
+     */
+    CharSequence diceAccessibilityOutcome() {
+        if (currentMessageObject == null || !currentMessageObject.isDice()) {
+            return null;
+        }
+        final int value = currentMessageObject.getDiceValue();
+        if (value <= 0) {
+            // still on its way: the server has not said yet how it landed
+            return null;
+        }
+        final String emoji = currentMessageObject.getDiceEmoji();
+        if (DICE_SLOT_MACHINE.equals(emoji)) {
+            return slotAccessibilityOutcome(value);
+        }
+        final StringBuilder sb = new StringBuilder();
+        sb.append(value);
+        // the number on its own means nothing for a game that is thrown at something: say what
+        // became of the throw as well, in the words the game is played in
+        final int outcome = diceAccessibilityOutcomeWord(emoji, value);
+        if (outcome != 0) {
+            sb.append(", ").append(getString(outcome));
+            return sb;
+        }
+        // for a game this does not know, whether the throw won is the server's to say, and it
+        // says it for the ones it knows about
+        final MessagesController.DiceFrameSuccess success = MessagesController.getInstance(currentAccount).diceSuccess.get(emoji);
+        if (success != null && success.num == value) {
+            sb.append(", ").append(getString(R.string.AccDescrDiceWin));
+        }
+        return sb;
+    }
+
+    /**
+     * What became of a throw, where the game says so. A die is only a die: it lands on a number
+     * and there is nothing to win, which is why the app itself marks no roll of it a success. The
+     * rest are thrown at something and either got there or did not.
+     */
+    static int diceAccessibilityOutcomeWord(String emoji, int value) {
+        if (DICE_DARTS.equals(emoji)) {
+            if (value == 6) {
+                return R.string.AccDescrDiceBullseye;
+            }
+            return value == 1 ? R.string.AccDescrDiceMissed : R.string.AccDescrDiceOnTarget;
+        }
+        if (DICE_BASKETBALL.equals(emoji)) {
+            return value >= 4 ? R.string.AccDescrDiceScored : R.string.AccDescrDiceMissed;
+        }
+        if (DICE_FOOTBALL.equals(emoji)) {
+            return value >= 3 ? R.string.AccDescrDiceGoal : R.string.AccDescrDiceMissed;
+        }
+        if (DICE_BOWLING.equals(emoji)) {
+            if (value == 6) {
+                return R.string.AccDescrDiceStrike;
+            }
+            // how many pins the ones between knock down is not written down anywhere the app can
+            // read, so only the two ends are named and the number speaks for the rest
+            return value == 1 ? R.string.AccDescrDiceMissed : 0;
+        }
+        return 0;
+    }
+
+    // the three reels of a slot machine are packed into the one number, and are taken apart the
+    // same way they are to be drawn
+    CharSequence slotAccessibilityOutcome(int value) {
+        final int[] reels = SlotsDrawable.decodeReels(value);
+        final StringBuilder sb = new StringBuilder();
+        for (int reel : reels) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(getString(slotAccessibilityReel(reel)));
+        }
+        if (reels[0] == 3 && reels[1] == 3 && reels[2] == 3) {
+            sb.append(", ").append(getString(R.string.AccDescrSlotJackpot));
+        }
+        return sb;
+    }
+
+    static int slotAccessibilityReel(int reel) {
+        switch (reel) {
+            case 0:
+                return R.string.AccDescrSlotBar;
+            case 1:
+                return R.string.AccDescrSlotBerries;
+            case 2:
+                return R.string.AccDescrSlotLemon;
+            default:
+                return R.string.AccDescrSlotSeven;
+        }
+    }
+
+    boolean hasShowMoreButton() {
+        return currentMessageObject != null && currentMessageObject.richLayout != null
+            && currentMessageObject.richLayout.hasShowMoreButton();
+    }
+
+    /**
+     * What a press does to the media a message carries, named for the state that media is in:
+     * fetch it, stop fetching it, fetch it again where fetching was stopped, play it, pause it,
+     * or open it. Null where the message carries nothing a press would do anything to.
+     */
+    CharSequence mediaAccessibilityActionLabel() {
+        if (currentMessageObject == null) {
+            return null;
+        }
+        // a message that could not be sent opens its menu when pressed, whatever its media
+        if (currentMessageObject.isSendError()) {
+            return getString(R.string.AccActionMessageOptions);
+        }
+        switch (getIconForAccessibilityClick()) {
+            case MediaActionDrawable.ICON_PLAY:
+                return getString(R.string.AccActionPlay);
+            case MediaActionDrawable.ICON_PAUSE:
+                return getString(R.string.AccActionPause);
+            case MediaActionDrawable.ICON_FILE:
+                return getString(R.string.AccActionOpenFile);
+            case MediaActionDrawable.ICON_DOWNLOAD:
+                return getString(R.string.AccActionDownload);
+            case MediaActionDrawable.ICON_CANCEL:
+                return getString(R.string.AccActionCancelDownload);
+        }
+        if (currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
+            return getString(R.string.CallAgain);
+        }
+        // a picture or a video already here opens rather than plays, and by then the button
+        // drawn over it is gone, so there is no icon left to go by
+        if (hasMediaToOpen()) {
+            return getString(R.string.Open);
+        }
+        return null;
+    }
+
+    boolean hasMediaToOpen() {
+        final MessageObject message = currentMessageObject;
+        if (message == null) {
+            return false;
+        }
+        return message.type == MessageObject.TYPE_PHOTO
+            || message.type == MessageObject.TYPE_VIDEO
+            || message.type == MessageObject.TYPE_GIF
+            || message.type == MessageObject.TYPE_ROUND_VIDEO
+            || message.type == MessageObject.TYPE_EXTENDED_MEDIA_PREVIEW;
+    }
+
+    // the very path a press takes, so that asking for it by name reaches the same place
+    void performMediaAccessibilityClick() {
+        if (currentMessageObject == null) {
+            return;
+        }
+        if (pressOpensMessageOptions()) {
+            if (delegate != null) {
+                delegate.didPressOther(this, otherX, otherY);
+            }
+            return;
+        }
+        final int icon = getIconForAccessibilityClick();
+        if (drawVideoImageButton) {
+            didClickedImage();
+        } else if (buttonState == -1 && currentMessageObject.needDrawBluredPreview()) {
+            // the flame over a view-once or timed photo is no button: a tap on it opens it
+            didClickedImage();
+        } else if (icon != MediaActionDrawable.ICON_NONE && icon != MediaActionDrawable.ICON_FILE) {
+            didPressButton(true, false);
+        } else if (currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
+            if (delegate != null) {
+                delegate.didPressOther(this, otherX, otherY);
+            }
+        } else {
+            didClickedImage();
+        }
+    }
+
+    /**
+     * Choosing a message, or letting go of one. A tick is drawn beside every message that can be
+     * chosen while the chat is choosing them, and that is what says the chat is in that state and
+     * that this message is one of the ones it will take.
+     */
+    boolean performSelectionAccessibilityAction(int action) {
+        if (delegate == null || currentMessageObject == null) {
+            return false;
+        }
+        // while messages are being chosen, a tap chooses, the way a tap on the screen does. Out
+        // of that, only a press held down starts choosing, again as it does by hand
+        if (!checkBoxVisible && action != AccessibilityNodeInfo.ACTION_LONG_CLICK) {
+            return false;
+        }
+        delegate.didPressSelect(this);
+        sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_CLICKED);
+        return true;
     }
 
     void didClickedImage() {
@@ -5800,10 +6358,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
 
         accessibilityFocused = false;
         accessibilityHovered = false;
-        announcedTransferOnce = false;
+        readPlaybackPosition = null;
 
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
@@ -6236,6 +6795,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         mediaSpoilerRevealProgress = 0f;
         TLRPC.Message newReply = messageObject.hasValidReplyMessageObject() ? messageObject.replyMessageObject.messageOwner : null;
         boolean messageIdChanged = currentMessageObject == null || currentMessageObject.getId() != messageObject.getId();
+        if (messageIdChanged) {
+            accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
+        }
         boolean messageChanged = currentMessageObject != messageObject || messageObject.forceUpdate || (isRoundVideo && isPlayingRound != (MediaController.getInstance().isPlayingMessage(currentMessageObject) && delegate != null && !delegate.keyboardIsOpened()));
         boolean dataChanged = currentMessageObject != null && currentMessageObject.getId() == messageObject.getId() && lastSendState == MessageObject.MESSAGE_SEND_STATE_EDITING && messageObject.isSent() ||
                 currentMessageObject == messageObject && (isUserDataChanged() || photoNotSet) ||
@@ -10832,23 +11394,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             boolean handled = false;
 
             if (avatarPressed) {
-                if (currentUser != null) {
-                    if (currentUser.id != 0) {
-                        handled = delegate.didLongPressUserAvatar(this, currentUser, lastTouchX, lastTouchY);
-                    }
-                } else if (currentChat != null) {
-                    final int id;
-                    if (currentMessageObject.messageOwner.fwd_from != null) {
-                        if ((currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
-                            id = currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
-                        } else {
-                            id = currentMessageObject.messageOwner.fwd_from.channel_post;
-                        }
-                    } else {
-                        id = 0;
-                    }
-                    handled = delegate.didLongPressChannelAvatar(this, currentChat, id, lastTouchX, lastTouchY);
-                }
+                handled = longPressSenderAvatar();
             } else if (sideButtonPressed) {
                 if (pressedSideButton != SIDE_BUTTON_SPONSORED_CLOSE &&
                     pressedSideButton != SIDE_BUTTON_SPONSORED_MORE &&
@@ -11816,6 +12362,48 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (currentMessagesGroup != null) {
             invalidateWithParent();
         }
+    }
+
+    // the time a live location has left and the timer of a timed photo are drawn on the message: they
+    // are said with it, worked out as it is read since they count down
+    CharSequence getAccessibilityTimerText() {
+        if (currentMessageObject == null || currentMessageObject.messageOwner == null) {
+            return null;
+        }
+        final TLRPC.MessageMedia media = MessageObject.getMedia(currentMessageObject.messageOwner);
+        if (media instanceof TLRPC.TL_messageMediaGeoLive) {
+            if (isCurrentLocationTimeExpired(currentMessageObject)) {
+                return null;
+            }
+            if (media.period == 0x7fffffff) {
+                return getString(R.string.SendLiveLocationForever);
+            }
+            final int now = ConnectionsManager.getInstance(currentAccount).getCurrentTime();
+            return formatString(R.string.AccDescrMsgTimeLeft, accessibilityTimerDuration(currentMessageObject.messageOwner.date + media.period - now));
+        }
+        if (currentMessageObject.isSecretMedia() && currentMessageObject.needDrawBluredPreview()) {
+            if (currentMessageObject.messageOwner.ttl == 0x7FFFFFFF) {
+                return getString(R.string.TimerPeriodOnce);
+            }
+            if (currentMessageObject.messageOwner.destroyTime != 0) {
+                return formatString(R.string.AccDescrMsgTimeLeft, accessibilityTimerDuration(currentMessageObject.getSecretTimeLeft()));
+            }
+            if (currentMessageObject.messageOwner.ttl > 0) {
+                return formatString(R.string.AccDescrMsgSecretTimer, accessibilityTimerDuration(currentMessageObject.messageOwner.ttl));
+            }
+        }
+        return null;
+    }
+
+    private static String accessibilityTimerDuration(int seconds) {
+        seconds = Math.max(0, seconds);
+        if (seconds < 60) {
+            return LocaleController.formatPluralString("Seconds", Math.max(1, seconds));
+        }
+        if (seconds < 3600) {
+            return LocaleController.formatPluralString("Minutes", (int) Math.ceil(seconds / 60f));
+        }
+        return LocaleController.formatPluralString("Hours", (int) Math.ceil(seconds / 3600f));
     }
 
     private boolean isCurrentLocationTimeExpired(MessageObject messageObject) {
@@ -14365,6 +14953,113 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
     }
 
+    // a video and a piece of music are the two that are worth having on the phone before they are
+    // wanted, and the two whose downloads are long enough to be worth stopping. Everything else
+    // arrives before there is anything to say about it.
+    boolean hasMediaDownloadAction() {
+        if (currentMessageObject == null || documentAttach == null) {
+            return false;
+        }
+        if (documentAttachType != DOCUMENT_ATTACH_TYPE_VIDEO && documentAttachType != DOCUMENT_ATTACH_TYPE_MUSIC) {
+            return false;
+        }
+        if (currentMessageObject.isSending() || currentMessageObject.isEditing() || currentMessageObject.isSendError()) {
+            return false;
+        }
+        // what is already on the phone has nothing left to download
+        return !currentMessageObject.mediaExists && !currentMessageObject.attachPathExists;
+    }
+
+    boolean isMediaDownloading() {
+        return FileLoader.getInstance(currentAccount).isLoadingFile(FileLoader.getAttachFileName(documentAttach));
+    }
+
+    // pressing the message plays what it holds, and streams it where it can, which is not the same
+    // as keeping it: this only fetches the file, and stops fetching it, and says which of the two
+    // it is about to do. A download taken up again carries on from where it was stopped, as it
+    // does for the button that is drawn.
+    void performMediaDownloadAction() {
+        if (!hasMediaDownloadAction()) {
+            return;
+        }
+        if (isMediaDownloading()) {
+            currentMessageObject.loadingCancelled = true;
+            FileLoader.getInstance(currentAccount).cancelLoadFile(documentAttach);
+        } else {
+            currentMessageObject.loadingCancelled = false;
+            currentMessageObject.putInDownloadsStore = true;
+            if (documentAttachType == DOCUMENT_ATTACH_TYPE_MUSIC) {
+                FileLoader.getInstance(currentAccount).loadFile(documentAttach, currentMessageObject, FileLoader.PRIORITY_NORMAL_UP, 0);
+            } else {
+                FileLoader.getInstance(currentAccount).loadFile(documentAttach, currentMessageObject, FileLoader.PRIORITY_NORMAL, currentMessageObject.shouldEncryptPhotoOrVideo() ? 2 : 0);
+            }
+            createLoadingProgressLayout(documentAttach);
+        }
+        updateButtonState(false, true, false);
+        invalidate();
+    }
+
+    // a video that can be streamed draws two buttons: one in the middle, which opens the viewer
+    // and plays what is there while the rest arrives, and a small one of its own that carries the
+    // download. The state of the button speaks for the small one, so a message that was left while
+    // it was still downloading offered to cancel that download and, being asked to, did nothing at
+    // all: the press it was turned into is only taken while the small button is not drawn.
+    //
+    // touching the middle is what touching the message does, and it is what is done here.
+    int getIconForAccessibilityClick() {
+        if (drawVideoImageButton) {
+            return autoPlayingMedia ? MediaActionDrawable.ICON_NONE : MediaActionDrawable.ICON_PLAY;
+        }
+        return getIconForCurrentState();
+    }
+
+    // the avatar of whoever sent a message opens a menu when it is held down: their profile, a
+    // chat with them, a mention of them, and a search of what they have said here. The avatar is
+    // drawn by the cell and is no view of its own, so touch exploration had nothing to hold, and
+    // none of it could be reached.
+    boolean hasSenderAvatarMenu() {
+        if (!isAvatarVisible || currentMessageObject == null || delegate == null) {
+            return false;
+        }
+        // whether holding the avatar leads anywhere is for the chat to answer: it opens in a
+        // group and in a chat with yourself, and nowhere else. A sender with no picture still has
+        // the menu, only without the picture drawn above it
+        if (!delegate.canLongPressAvatar(this)) {
+            return false;
+        }
+        return currentUser != null && currentUser.id != 0 || currentChat != null;
+    }
+
+    // held down is what it is asked to be, so that whatever the menu comes to hold is come by the
+    // same way it is by everyone else
+    boolean performSenderAvatarMenu() {
+        return hasSenderAvatarMenu() && longPressSenderAvatar();
+    }
+
+    // what holding the avatar of the sender does. A finger and a screen reader both come here, so
+    // that the two cannot come to do different things
+    boolean longPressSenderAvatar() {
+        boolean handled = false;
+        if (currentUser != null) {
+            if (currentUser.id != 0) {
+                handled = delegate.didLongPressUserAvatar(this, currentUser, lastTouchX, lastTouchY);
+            }
+        } else if (currentChat != null) {
+            final int id;
+            if (currentMessageObject.messageOwner.fwd_from != null) {
+                if ((currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
+                    id = currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
+                } else {
+                    id = currentMessageObject.messageOwner.fwd_from.channel_post;
+                }
+            } else {
+                id = 0;
+            }
+            handled = delegate.didLongPressChannelAvatar(this, currentChat, id, lastTouchX, lastTouchY);
+        }
+        return handled;
+    }
+
     int getIconForCurrentState() {
         if (currentMessageObject == null || currentMessageObject.hasExtendedMedia()) {
             return MediaActionDrawable.ICON_NONE;
@@ -14516,6 +15211,19 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     public void updateButtonState(boolean ifSame, boolean animated, boolean fromSet) {
+        final int previousButtonState = buttonState;
+        final int previousMiniButtonState = miniButtonState;
+        updateButtonStateInternal(ifSame, animated, fromSet);
+        // what a message offers to do is read off the state of its button: it downloads, or it
+        // cancels what is downloading, or it plays. Nothing said that state had changed, so a
+        // screen reader went on offering to download a file that was already on its way, until
+        // the message was left and returned to.
+        if ((buttonState != previousButtonState || miniButtonState != previousMiniButtonState) && AndroidUtilities.isAccessibilityScreenReaderEnabled()) {
+            sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+        }
+    }
+
+    void updateButtonStateInternal(boolean ifSame, boolean animated, boolean fromSet) {
         if (currentMessageObject == null) {
             return;
         }
@@ -15211,6 +15919,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     @Override
     public void onSuccessDownload(String fileName) {
+        checkAccessibilityStateChanges();
         if (documentAttachType == DOCUMENT_ATTACH_TYPE_STICKER && currentMessageObject.isDice()) {
             DownloadController.getInstance(currentAccount).removeLoadingFileObserver(this);
             setCurrentDiceValue(true);
@@ -15431,7 +16140,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return formatTransferProgress(currentMessageObject.isSending(), percent, currentMessageObject.loadedFileSize, hasSize ? lastLoadingSizeTotal : 0);
     }
 
-    private boolean isExploredByAccessibility() {
+    // whether a screen reader is on this message: it has asked the message for the focus, or the
+    // finger has come onto it. The focus the view reports of itself is not enough alone, since a
+    // reader on one of the pieces inside the message leaves it unset. Everything the message says
+    // on its own, while it is being read, asks here
+    boolean isExploredByAccessibility() {
         if (!accessibilityHovered && !accessibilityFocused && !isAccessibilityFocused()) {
             return false;
         }
@@ -16054,6 +16767,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
 
         String viaUsername = null;
+        accessibilityViaBotText = null;
         CharSequence viaString = null;
         if (messageObject.isWelcomeMessage() && !messageObject.isWelcomeAnchored() && delegate != null && delegate.getChatMode() == ChatActivity.MODE_DEFAULT && messageObject.messageOwner.from_id != null && messageObject.messageOwner.from_id.user_id != 0) {
             final TLRPC.User botUser = MessagesController.getInstance(currentAccount).getUser(messageObject.messageOwner.from_id.user_id);
@@ -16207,6 +16921,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     color = getThemedColor(currentMessageObject.isOutOwner() ? Theme.key_chat_outViaBotNameText : Theme.key_chat_inViaBotNameText);
                 }
                 String viaBotString = getString(R.string.ViaBot);
+                accessibilityViaBotText = viaBotString + " " + viaUsername;
                 if (currentNameString.length() > 0) {
                     SpannableStringBuilder stringBuilder = new SpannableStringBuilder();
                     stringBuilder.append(nameStringFinal).append(" ").append(viaBotString).append(" ").append(viaUsername);
@@ -17028,7 +17743,32 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         );
     }
 
-    private String getAuthorName() {
+    // who a message is from was only ever read where it was a person. An admin who posts without
+    // their name, and anyone who posts as a channel, are the chat itself, and were passed over as
+    // though the message had come from nobody at all: the message was read and the sender was not,
+    // so a run of messages from several of them could not be told apart.
+    //
+    // inside a channel it stays unsaid. Every post there comes from the channel, and naming it over
+    // each one says nothing that being in the channel has not already said. A channel that signs
+    // its posts with the person behind them is another matter, and that person is named.
+    //
+    // what is asked here is who sent a message, and not whether a name happens to be drawn over it:
+    // a name is drawn once above a run of messages, and not at all above a photo or a voice message,
+    // and none of that changes who any of them are from.
+    boolean isNeedAccessibilityAuthorName() {
+        if (!isChat || currentMessageObject == null || currentMessageObject.isOut()) {
+            return false;
+        }
+        if (currentUser != null) {
+            return true;
+        }
+        if (currentChat == null) {
+            return false;
+        }
+        return isMegagroup || currentChat.signature_profiles;
+    }
+
+    String getAuthorName() {
         if (currentUser != null) {
             return UserObject.getUserName(currentUser);
         } else if (currentChat != null) {
@@ -17398,10 +18138,120 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     protected void onDraw(Canvas canvas) {
         drawInternal(canvas);
     }
+    // what a message keeps as a file of its own: a picture, a voice, a video, a round video, a
+    // gif, a piece of music or a file. Everything else it holds is words, and words are here as
+    // soon as the message is
+    boolean hasAccessibilityDownloadState() {
+        if (currentMessageObject == null || currentMessageObject.isSending() || currentMessageObject.isSendError() || currentMessageObject.isEditing()) {
+            return false;
+        }
+        switch (currentMessageObject.type) {
+            case MessageObject.TYPE_PHOTO:
+            case MessageObject.TYPE_VOICE:
+            case MessageObject.TYPE_VIDEO:
+            case MessageObject.TYPE_ROUND_VIDEO:
+            case MessageObject.TYPE_GIF:
+            case MessageObject.TYPE_FILE:
+            case MessageObject.TYPE_MUSIC:
+                return true;
+        }
+        return false;
+    }
+
+    boolean isMediaDownloadedForAccessibility() {
+        return currentMessageObject != null && (currentMessageObject.mediaExists || currentMessageObject.attachPathExists);
+    }
+
+    // a message changes under the reader: the file arrives, a voice is played, a message is seen.
+    // All of it is drawn, and the words a reader is given are only built again the next time the
+    // message is reached, so someone sitting on a message heard none of it and had to leave and
+    // come back to find out. Say the piece that changed, and nothing else.
+    void checkAccessibilityStateChanges() {
+        if (currentMessageObject == null) {
+            return;
+        }
+        final boolean downloaded = hasAccessibilityDownloadState() && isMediaDownloadedForAccessibility();
+        final boolean contentUnread = currentMessageObject.isContentUnread();
+        final boolean unread = currentMessageObject.isOut() && !currentMessageObject.scheduled && currentMessageObject.isUnread();
+        final CharSequence reactions = saysReactionChanges() ? getReactionsAccessibilityState() : null;
+        final int id = currentMessageObject.getId();
+        // a cell is used again for another message, and what the last one was doing is nothing to
+        // say about this one
+        if (accessibilityStateMessageId != id) {
+            accessibilityStateMessageId = id;
+        } else if (isExploredByAccessibility()) {
+            final StringBuilder changed = new StringBuilder();
+            if (downloaded && !accessibilityStateDownloaded) {
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrMediaDownloaded));
+            }
+            if (!contentUnread && accessibilityStateContentUnread) {
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrMsgPlayed));
+            }
+            if (!unread && accessibilityStateUnread) {
+                appendAccessibilityStateChange(changed, getString(R.string.AccDescrMsgRead));
+            }
+            if (!TextUtils.isEmpty(reactions) && !TextUtils.equals(reactions, accessibilityStateReactions)) {
+                appendAccessibilityStateChange(changed, reactions);
+            }
+            if (changed.length() > 0) {
+                announceForAccessibility(changed);
+            }
+        }
+        accessibilityStateDownloaded = downloaded;
+        accessibilityStateContentUnread = contentUnread;
+        accessibilityStateUnread = unread;
+        accessibilityStateReactions = reactions;
+    }
+
+    void appendAccessibilityStateChange(StringBuilder sb, CharSequence text) {
+        if (TextUtils.isEmpty(text)) {
+            return;
+        }
+        if (sb.length() > 0) {
+            sb.append(", ");
+        }
+        sb.append(text);
+    }
+
+    // a reaction arriving is something that happens to a message while it sits there, and it is
+    // drawn under it without a word said. In a channel they arrive by the hundred and would talk
+    // over everything else, so this is for the chats where a reaction is one person answering
+    boolean saysReactionChanges() {
+        if (currentMessageObject == null) {
+            return false;
+        }
+        final long did = currentMessageObject.getDialogId();
+        if (did >= 0) {
+            return true;
+        }
+        return !ChatObject.isChannelAndNotMegaGroup(MessagesController.getInstance(currentAccount).getChat(-did));
+    }
+
+    // the reactions as they now stand, in the form the message itself reads them out in: what is
+    // under the message and how many gave each of them
+    CharSequence getReactionsAccessibilityState() {
+        if (currentMessageObject == null || currentMessageObject.messageOwner.reactions == null || currentMessageObject.messageOwner.reactions.results == null) {
+            return null;
+        }
+        final StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < currentMessageObject.messageOwner.reactions.results.size(); ++i) {
+            final TLRPC.ReactionCount reactionCount = currentMessageObject.messageOwner.reactions.results.get(i);
+            if (reactionCount == null || reactionCount.count <= 0) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(MessageObject.describeReaction(currentAccount, reactionCount.reaction)).append(" ").append(reactionCount.count);
+        }
+        return sb.length() > 0 ? sb : null;
+    }
+
     public void drawInternal(Canvas canvas) {
         if (currentMessageObject == null) {
             return;
         }
+        checkAccessibilityStateChanges();
         if (!wasLayout) {
             onLayout(false, getLeft(), getTop(), getRight(), getBottom());
         }
@@ -23205,29 +24055,224 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return layoutHeight;
     }
 
+    // the card under a link is made of a site name, a title, an author and a description, each
+    // of them drawn on its own: put together they are what the card says
+    CharSequence linkPreviewAccessibilityText() {
+        final StringBuilder sb = new StringBuilder();
+        appendLinkPreviewLayout(sb, siteNameLayout);
+        appendLinkPreviewLayout(sb, titleLayout);
+        appendLinkPreviewLayout(sb, linkPreview != null ? linkPreview.authorLayout : null);
+        appendLinkPreviewLayout(sb, descriptionLayout);
+        return sb;
+    }
+
+    private void appendLinkPreviewLayout(StringBuilder sb, StaticLayout layout) {
+        if (layout == null) {
+            return;
+        }
+        final CharSequence text = layout.getText();
+        if (TextUtils.isEmpty(text)) {
+            return;
+        }
+        if (sb.length() > 0) {
+            sb.append(", ");
+        }
+        sb.append(text);
+    }
+
+    // a card that is only a picture is opened as a picture, which the message already offers, so
+    // the action is for the ones that stand for a page
+    // what a press on the card under a link does when the card stands for a page. A finger and a
+    // screen reader both come here, so that the two cannot come to do different things
+    private void openLinkPreviewWebPage() {
+        TLRPC.WebPage webPage = MessageObject.getMedia(currentMessageObject.messageOwner).webpage;
+        if (webPage != null && !TextUtils.isEmpty(webPage.embed_url)/* && TextUtils.isEmpty(WebPlayerView.getYouTubeVideoId(webPage.embed_url))*/) {
+            if (delegate != null) {
+                delegate.needOpenWebView(currentMessageObject, webPage.embed_url, webPage.site_name, webPage.title, webPage.url, webPage.embed_width, webPage.embed_height);
+            }
+        } else if (webPage != null) {
+            if (delegate != null) {
+                delegate.didPressWebPage(this, webPage, webPage.url, MessageObject.getMedia(currentMessageObject.messageOwner).safe);
+            } else {
+                Browser.openUrl(getContext(), webPage.url);
+            }
+        }
+    }
+
+    boolean hasOpenableLinkPreview() {
+        if (currentMessageObject == null || currentMessageObject.preview || !hasLinkPreview) {
+            return false;
+        }
+        if (drawPhotoImage && (documentAttachType == DOCUMENT_ATTACH_TYPE_GIF || documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO || (linkPreview == null || linkPreview.authorLayout == null) && titleLayout == null && descriptionLayout == null && siteNameLayout == null)) {
+            return false;
+        }
+        final TLRPC.MessageMedia media = MessageObject.getMedia(currentMessageObject.messageOwner);
+        return media != null && media.webpage != null;
+    }
+
+    // a channel that signs its posts with the person behind them draws that person's picture
+    // beside every post, and a tap on the picture opens them. The picture is drawn by the cell and
+    // is no view of its own, so touch exploration had nothing to tap: the person was named over
+    // every post and could not be reached from any of them.
+    //
+    // in a group the same picture is held down rather than tapped, and what that opens is a menu
+    // the chat builds. A channel opens no such menu, so what is offered here is the tap itself.
+    boolean hasSignedPostAuthorAction() {
+        if (!isAvatarVisible || currentMessageObject == null || delegate == null) {
+            return false;
+        }
+        if (currentMessageObject.isSponsored() || currentMessageObject.getDialogId() >= 0) {
+            return false;
+        }
+        final TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-currentMessageObject.getDialogId());
+        if (!ChatObject.isChannelAndNotMegaGroup(chat) || !chat.signature_profiles) {
+            return false;
+        }
+        // a picture standing for a forward whose sender is hidden opens no one
+        return currentUser != null && currentUser.id != 0 || currentChat != null;
+    }
+
+    // the chat a tap on the picture is answered with. A post forwarded into the channel opens
+    // where it came from; anything else stays with the channel the post was made in
+    private TLRPC.Chat signedPostAuthorTargetChat() {
+        TLRPC.Chat chat = currentChat;
+        if (currentMessageObject != null && currentMessageObject.messageOwner.fwd_from != null
+            && (currentMessageObject.messageOwner.fwd_from.flags & 16) == 0 && currentForwardChannel != null) {
+            chat = currentForwardChannel;
+        }
+        return chat != null ? chat : currentChat;
+    }
+
+    private int signedPostAuthorTargetPostId() {
+        if (currentMessageObject == null || currentMessageObject.messageOwner.fwd_from == null) {
+            return 0;
+        }
+        if ((currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
+            return currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
+        }
+        return currentMessageObject.messageOwner.fwd_from.channel_post;
+    }
+
+    // named by what the tap opens and not by what the picture is drawn in. A channel that signs
+    // its posts keeps itself as the chat of every cell and names the person only in the message,
+    // so a name taken from the cell called opening a person opening a channel.
+    CharSequence getSignedPostAuthorActionLabel() {
+        if (currentUser != null) {
+            return getString(R.string.OpenProfile);
+        }
+        final TLRPC.Chat target = signedPostAuthorTargetChat();
+        if (target != null && target.signature_profiles && currentMessageObject != null) {
+            final long did = DialogObject.getPeerDialogId(currentMessageObject.messageOwner.from_id);
+            // the channel signing in its own name opens its own page, which is a profile as much
+            // as a person's is
+            if (did > 0 || did == currentMessageObject.getDialogId()) {
+                return getString(R.string.OpenProfile);
+            }
+            if (did < 0) {
+                final TLRPC.Chat signer = MessagesController.getInstance(currentAccount).getChat(-did);
+                return getString(ChatObject.isChannelAndNotMegaGroup(signer) ? R.string.OpenChannel2 : R.string.OpenGroup2);
+            }
+        }
+        return getString(ChatObject.isChannelAndNotMegaGroup(target) ? R.string.OpenChannel2 : R.string.OpenGroup2);
+    }
+
+    // tapped the way the picture is tapped, so that a reader comes to whatever a tap comes to
+    private void performSignedPostAuthorAction() {
+        if (!hasSignedPostAuthorAction()) {
+            return;
+        }
+        if (currentUser != null) {
+            delegate.didPressUserAvatar(this, currentUser, lastTouchX, lastTouchY, false);
+            return;
+        }
+        delegate.didPressChannelAvatar(this, signedPostAuthorTargetChat(), signedPostAuthorTargetPostId(), lastTouchX, lastTouchY, false);
+    }
+
+    // a message that holds nothing to open answers a press with nothing at all: a text message,
+    // and a poll or a checklist, whose answers are pressed on their own and whose card is not.
+    // What a press on the screen does to such a message is hold it, and what holding it opens is
+    // the menu of the message, so that is what a press asks for here. The menu keeps the one
+    // place it is offered by name, which is where a reader looks for it.
+    private boolean pressOpensMessageOptions() {
+        if (currentMessageObject == null) {
+            return false;
+        }
+        // a message that could not be sent has nothing to play or open: a tap on it anywhere opens
+        // its menu, with Retry and Delete. The button left from the upload is no longer drawn, and
+        // going by it said Play or Cancel and did that
+        if (currentMessageObject.isSendError()) {
+            return true;
+        }
+        if (drawVideoImageButton) {
+            return false;
+        }
+        if (currentMessageObject.type != MessageObject.TYPE_TEXT && currentMessageObject.type != MessageObject.TYPE_POLL) {
+            return false;
+        }
+        return getIconForCurrentState() == MediaActionDrawable.ICON_NONE;
+    }
+
+    // whether the screen reader is on this message or on any part of it given as a node of its own,
+    // so what is drawn inside the message can tell whether it is being read
+    public boolean isAccessibilityFocusedAnywhere() {
+        return isAccessibilityFocused() || accessibilityFocused || accessibilityFocusedStop != NO_ACCESSIBILITY_STOP;
+    }
+
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
         if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
             accessibilityFocused = true;
+            accessibilityFocusedStop = AccessibilityNodeProvider.HOST_VIEW_ID;
         } else if (action == AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS) {
             accessibilityFocused = false;
+            if (accessibilityFocusedStop == AccessibilityNodeProvider.HOST_VIEW_ID) {
+                accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
+            }
             announcedTransferOnce = false;
+            updateAccessibilityTraversalText();
+            readPlaybackPosition = null;
+        }
+        if ((action == AccessibilityNodeInfo.ACTION_CLICK || action == AccessibilityNodeInfo.ACTION_LONG_CLICK)
+                && performSelectionAccessibilityAction(action)) {
+            return true;
         }
         if (delegate != null && delegate.onAccessibilityAction(action, arguments)) {
             return false;
         }
+        final int linkOptions = linkOptionsActionIndex(action);
+        if (linkOptions >= 0) {
+            collectLinksWithOptions();
+            if (delegate != null && linkOptions < linksWithOptions.size()) {
+                // the very path a link held down takes
+                delegate.didPressUrl(this, linksWithOptions.get(linkOptions), true);
+            }
+            return true;
+        }
         if (action == AccessibilityNodeInfo.ACTION_CLICK) {
-            int icon = getIconForCurrentState();
-            if (icon != MediaActionDrawable.ICON_NONE && icon != MediaActionDrawable.ICON_FILE) {
-                didPressButton(true, false);
-            } else if (currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
-                delegate.didPressOther(this, otherX, otherY);
-            } else {
-                didClickedImage();
+            performMediaAccessibilityClick();
+            return true;
+        } else if (action == R.id.acc_action_media) {
+            performMediaAccessibilityClick();
+            return true;
+        } else if (action == R.id.acc_action_via_bot) {
+            // what a press on the bot's name does
+            if (delegate != null && currentMessageObject != null && !TextUtils.isEmpty(accessibilityViaBotText)) {
+                if (currentViaBotUser != null && currentViaBotUser.bot_inline_placeholder == null) {
+                    delegate.didPressViaBotNotInline(this, currentViaBotUser.id);
+                } else {
+                    String username = UserObject.getPublicUsername(currentViaBotUser);
+                    delegate.didPressViaBot(this, username != null ? username : currentMessageObject.messageOwner.via_bot_name);
+                }
             }
             return true;
         } else if (action == R.id.acc_action_small_button) {
             didPressMiniButton(true);
+        } else if (action == R.id.acc_action_sender_avatar_menu) {
+            performSenderAvatarMenu();
+        } else if (action == R.id.acc_action_download) {
+            performMediaDownloadAction();
+        } else if (reactionsLayoutInBubble != null && reactionsLayoutInBubble.performAccessibilityAction(action)) {
+            return true;
         } else if (action == R.id.acc_action_msg_options) {
             if (delegate != null) {
                 if (currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
@@ -23235,6 +24280,20 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 } else {
                     delegate.didPressOther(this, otherX, otherY);
                 }
+            }
+        } else if (action == R.id.acc_action_open_link_preview) {
+            if (hasOpenableLinkPreview()) {
+                openLinkPreviewWebPage();
+            }
+        } else if (action == R.id.acc_action_open_poll_media) {
+            if (hasPollDescriptionMedia()) {
+                final Rect bounds = poll.contentDrawable.getBounds();
+                didClickedPollImage(this, poll.contentDrawable.getImageReceiver(), null, poll.contentDrawable.getMedia(), bounds.centerX(), bounds.centerY(), PollAttachedMediaPack.INDEX_DESCRIPTION);
+            }
+        } else if (action == R.id.acc_action_open_poll_explanation_media) {
+            if (hasPollExplanationMedia()) {
+                final Rect bounds = poll.explanationDrawable.getBounds();
+                didClickedPollImage(this, poll.explanationDrawable.getImageReceiver(), null, poll.explanationDrawable.getMedia(), bounds.centerX(), bounds.centerY(), PollAttachedMediaPack.INDEX_EXPLANATION);
             }
         } else if (action == R.id.acc_action_open_forwarded_origin) {
             if (delegate != null) {
@@ -23250,18 +24309,25 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             if (delegate != null) {
                 delegate.didPressSummarize(this, drawSummaryReply);
             }
-        } else if (action == R.id.acc_action_copy_code) {
-            if (delegate != null && currentMessageObject.textLayoutBlocks != null) {
-                for (MessageObject.TextLayoutBlock block : currentMessageObject.textLayoutBlocks) {
-                    if (block.hasCodeCopyButton) {
-                        delegate.didPressCodeCopy(this, block);
-                        break;
-                    }
+        } else if (copyTextActionIndex(action) >= 0) {
+            collectCopyableTexts();
+            final int index = copyTextActionIndex(action);
+            if (delegate != null && index >= 0 && index < copyableTexts.size()) {
+                final CopyableText copyable = copyableTexts.get(index);
+                if (copyable.span != null) {
+                    // the very path a press held on the run takes, so the same thing is put on the
+                    // clipboard and the same word said back about it
+                    delegate.didPressUrl(this, copyable.span, true);
+                } else if (copyable.block != null) {
+                    delegate.didPressCodeCopy(this, copyable.block);
                 }
             }
+        } else if (action == R.id.acc_action_sender_profile) {
+            performSignedPostAuthorAction();
         }
         if (currentMessageObject.isVoice() || currentMessageObject.isRoundVideo() || currentMessageObject.isMusic() && MediaController.getInstance().isPlayingMessage(currentMessageObject)) {
             if (seekBarAccessibilityDelegate.performAccessibilityActionInternal(action, arguments)) {
+                announcePlaybackPosition();
                 return true;
             }
         }
@@ -23314,8 +24380,60 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             currentFocusedVirtualView = 0;
             accessibilityHovered = false;
             announcedTransferOnce = false;
+            updateAccessibilityTraversalText();
+            readPlaybackPosition = null;
         }
         return super.onHoverEvent(event);
+    }
+
+    CharSequence readPlaybackPosition;
+
+    // the framework's granular traversal iterates over the host view's content description, and
+    // changing it reports the message as changed, which has screen readers read it again: so it
+    // is only brought up to date once the message is no longer being read
+    void updateAccessibilityTraversalText() {
+        if (accessibilityText != null && !TextUtils.equals(getContentDescription(), accessibilityText)) {
+            setContentDescription(accessibilityText);
+        }
+    }
+
+    private Runnable announcePlaybackPositionRunnable;
+
+    // after seeking, only the new position is of use, so report it instead of leaving it to
+    // the screen reader, which would read the whole message again
+    private CharSequence seekBarPositionDescription() {
+        if (currentMessageObject == null) {
+            return null;
+        }
+        final int duration = (int) currentMessageObject.getDuration();
+        if (duration <= 0 || seekBarAccessibilityDelegate == null) {
+            return null;
+        }
+        final float progress = currentMessageObject.isMusic() || currentMessageObject.isVoice() && !useSeekBarWaveform ? seekBar.getProgress() : (useSeekBarWaveform ? seekBarWaveform.getProgress() : currentMessageObject.audioProgress);
+        final int position = Math.max(0, Math.min(duration, Math.round(progress * duration)));
+        return formatString(R.string.AccDescrPlayerDuration, LocaleController.formatDuration(position), LocaleController.formatDuration(duration));
+    }
+
+    private void announcePlaybackPosition() {
+        // the position kept while the message is read is the one before the seek
+        readPlaybackPosition = null;
+        if (announcePlaybackPositionRunnable != null) {
+            removeCallbacks(announcePlaybackPositionRunnable);
+        }
+        announcePlaybackPositionRunnable = () -> {
+            announcePlaybackPositionRunnable = null;
+            readPlaybackPosition = null;
+            CharSequence playbackPosition = MediaController.getPlaybackPositionDescription(currentMessageObject);
+            if (playbackPosition == null) {
+                // a message that was never played is moved by its own slider, and nothing else
+                // knows where it stands
+                playbackPosition = seekBarPositionDescription();
+            }
+            if (playbackPosition != null) {
+                announceForAccessibility(playbackPosition);
+            }
+        };
+        postDelayed(announcePlaybackPositionRunnable, 400);
     }
 
     @Override
@@ -23326,6 +24444,80 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     @Override
     public AccessibilityNodeProvider getAccessibilityNodeProvider() {
         return new ChatMessageAccessibilityNodeProvider(this);
+    }
+
+    // the buttons of a message are reported in the order they are added to it: keeping that
+    // order lets each of them say which one comes before it, which is what a screen reader
+    // walks back through
+    final ArrayList<Integer> reportedVirtualViewIds = new ArrayList<>();
+
+    static final int NO_PREVIOUS_VIRTUAL_VIEW = Integer.MIN_VALUE;
+
+    // which stop of this message a screen reader is on: the message itself, one of its buttons, or
+    // none of them
+    static final int NO_ACCESSIBILITY_STOP = Integer.MIN_VALUE + 1;
+    int accessibilityFocusedStop = NO_ACCESSIBILITY_STOP;
+    final Rect accessibilityStopRect = new Rect();
+
+    public boolean hasAccessibilityFocusedStop() {
+        return accessibilityFocusedStop != NO_ACCESSIBILITY_STOP;
+    }
+
+    /**
+     * Where the stop a screen reader goes to next from this message is, from the top of the
+     * message: {@code forward} for the one after the stop it is on, else the one before it. The top
+     * of it is given going forward and the bottom going back, which is the edge a list has to
+     * bring into sight. {@link #NO_ACCESSIBILITY_STOP} when the next stop is not in this message.
+     */
+    public int getAccessibilityStopEdge(boolean forward) {
+        if (accessibilityFocusedStop == NO_ACCESSIBILITY_STOP) {
+            return NO_ACCESSIBILITY_STOP;
+        }
+        final AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
+        // the stops are put in order as the message is reported, so it is reported first
+        provider.createAccessibilityNodeInfo(AccessibilityNodeProvider.HOST_VIEW_ID);
+        final int at = accessibilityFocusedStop == AccessibilityNodeProvider.HOST_VIEW_ID ? -1 : reportedVirtualViewIds.indexOf(accessibilityFocusedStop);
+        if (accessibilityFocusedStop != AccessibilityNodeProvider.HOST_VIEW_ID && at < 0) {
+            return NO_ACCESSIBILITY_STOP;
+        }
+        final ArrayList<Integer> ids = new ArrayList<>(reportedVirtualViewIds);
+        for (int i = forward ? at + 1 : at - 1; i >= 0 && i < ids.size(); i += forward ? 1 : -1) {
+            // a stop with no place on the screen is left out, as it is when it is reported
+            final AccessibilityNodeInfo info = provider.createAccessibilityNodeInfo(ids.get(i));
+            if (info == null) {
+                continue;
+            }
+            info.getBoundsInParent(accessibilityStopRect);
+            return forward ? accessibilityStopRect.top : accessibilityStopRect.bottom;
+        }
+        // going back from the first button is going back to the message, which is on the screen
+        return NO_ACCESSIBILITY_STOP;
+    }
+
+    public static boolean isAccessibilityStopEdge(int edge) {
+        return edge != NO_ACCESSIBILITY_STOP;
+    }
+
+    final Rect accessibilityVisibleRect = new Rect();
+
+    // a button is only said to be on the screen when it is: one below the edge that claimed to
+    // be in sight was landed on where nothing could be seen, and was never brought into view
+    boolean isAccessibilityStopOnScreen(Rect boundsInScreen, int[] pos) {
+        if (!getLocalVisibleRect(accessibilityVisibleRect)) {
+            return false;
+        }
+        accessibilityVisibleRect.offset(pos[0], pos[1]);
+        return Rect.intersects(accessibilityVisibleRect, boundsInScreen);
+    }
+
+    int previousVirtualViewId(int virtualViewId) {
+        final int at = reportedVirtualViewIds.indexOf(virtualViewId);
+        if (at < 0) {
+            return NO_PREVIOUS_VIRTUAL_VIEW;
+        }
+        // what comes before the first button of a message is the message itself, and saying so
+        // is what keeps going back from a button from passing the message by
+        return at == 0 ? AccessibilityNodeProvider.HOST_VIEW_ID : reportedVirtualViewIds.get(at - 1);
     }
 
     void sendAccessibilityEventForVirtualView(int viewId, int eventType) {
@@ -23699,6 +24891,90 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     public SeekBarWaveform getSeekBarWaveform() {
         return seekBarWaveform;
+    }
+
+    /**
+     * A link held down opens a menu of what can be done with it: opening it, copying it, and for
+     * a username or a hashtag, what belongs to those. A screen reader reaches the links of a
+     * message through its own list of them, which can only open a link, never hold it down, so
+     * the menu could not be had at all. Each link that has one is given an action of its own on
+     * the message, named by the link, that opens the very same menu.
+     */
+    static final int MAX_LINK_OPTIONS_ACTIONS = 16;
+
+    // an action carries an id of its own. TalkBack lists a custom action in its menu only when the id is above the ones the system keeps for itself, which a resource id always is and an id handed out for a view never is, so the ids come from a fixed list
+    static final int[] LINK_OPTIONS_ACTION_IDS = { R.id.acc_action_link_options_0, R.id.acc_action_link_options_1, R.id.acc_action_link_options_2, R.id.acc_action_link_options_3, R.id.acc_action_link_options_4, R.id.acc_action_link_options_5, R.id.acc_action_link_options_6, R.id.acc_action_link_options_7, R.id.acc_action_link_options_8, R.id.acc_action_link_options_9, R.id.acc_action_link_options_10, R.id.acc_action_link_options_11, R.id.acc_action_link_options_12, R.id.acc_action_link_options_13, R.id.acc_action_link_options_14, R.id.acc_action_link_options_15 };
+
+    final ArrayList<URLSpan> linksWithOptions = new ArrayList<>();
+
+    static int linkOptionsActionId(int index) {
+        return LINK_OPTIONS_ACTION_IDS[index];
+    }
+
+    static int linkOptionsActionIndex(int action) {
+        for (int i = 0; i < LINK_OPTIONS_ACTION_IDS.length; i++) {
+            if (LINK_OPTIONS_ACTION_IDS[i] == action) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    void collectLinksWithOptions() {
+        linksWithOptions.clear();
+        if (currentMessageObject == null) {
+            return;
+        }
+        addLinksWithOptions(currentMessageObject.messageText);
+        addLinksWithOptions(currentMessageObject.caption);
+    }
+
+    void addLinksWithOptions(CharSequence text) {
+        if (!(text instanceof Spanned)) {
+            return;
+        }
+        final Spanned spanned = (Spanned) text;
+        final URLSpan[] spans = spanned.getSpans(0, spanned.length(), URLSpan.class);
+        if (spans == null || spans.length == 0) {
+            return;
+        }
+        // in the order they are written in, which is not the order they come back in
+        Arrays.sort(spans, (a, b) -> spanned.getSpanStart(a) - spanned.getSpanStart(b));
+        for (URLSpan span : spans) {
+            if (linksWithOptions.size() >= MAX_LINK_OPTIONS_ACTIONS) {
+                return;
+            }
+            // a person named in the text opens their profile when held, and a bot command is
+            // put into the field to be finished: neither has a menu
+            final String url = span.getURL();
+            if (span instanceof URLSpanUserMention || url == null || url.startsWith("/")) {
+                continue;
+            }
+            final int start = spanned.getSpanStart(span);
+            final int end = spanned.getSpanEnd(span);
+            if (start < 0 || end <= start) {
+                continue;
+            }
+            linksWithOptions.add(span);
+        }
+    }
+
+    CharSequence linkOptionsLabel(URLSpan span) {
+        CharSequence text = null;
+        for (CharSequence source : new CharSequence[] { currentMessageObject.messageText, currentMessageObject.caption }) {
+            if (source instanceof Spanned && ((Spanned) source).getSpanStart(span) >= 0) {
+                text = source.subSequence(((Spanned) source).getSpanStart(span), ((Spanned) source).getSpanEnd(span));
+                break;
+            }
+        }
+        if (TextUtils.isEmpty(text)) {
+            text = span.getURL();
+        }
+        CharSequence label = AndroidUtilities.replaceNewLines(text);
+        if (label.length() > 64) {
+            label = label.subSequence(0, 64) + "…";
+        }
+        return formatString(R.string.AccActionLinkOptions, label);
     }
 
     public void setImageCoords(RectF rect) {
